@@ -1,6 +1,5 @@
 """Tests for Dockerfile programmatic validation."""
 
-import pytest
 
 from wunderunner.validation.dockerfile import validate_dockerfile_syntax
 

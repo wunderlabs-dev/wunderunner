@@ -1,9 +1,38 @@
 """Dockerfile generation agent."""
 
+from jinja2 import Template
 from pydantic_ai import Agent
 
 from wunderunner.agents.tools import AgentDeps, register_tools
 from wunderunner.settings import Generation, get_model
+
+USER_PROMPT = Template("""\
+<project_analysis>
+{{ analysis | tojson(indent=2) }}
+</project_analysis>
+
+{% if learnings %}
+<previous_learnings>
+{% for learning in learnings %}
+- {{ learning }}
+{% endfor %}
+</previous_learnings>
+{% endif %}
+
+{% if existing_dockerfile %}
+<existing_dockerfile>
+{{ existing_dockerfile }}
+</existing_dockerfile>
+{% endif %}
+
+{% if hints %}
+<user_hints>
+{{ hints }}
+</user_hints>
+{% endif %}
+
+Generate a Dockerfile based on the analysis above.\
+""")
 
 SYSTEM_PROMPT = """\
 <task>

@@ -1,9 +1,42 @@
 """Docker Compose generation agent."""
 
+from jinja2 import Template
 from pydantic_ai import Agent
 
 from wunderunner.agents.tools import AgentDeps, register_tools
 from wunderunner.settings import Generation, get_model
+
+USER_PROMPT = Template("""\
+<project_analysis>
+{{ analysis | tojson(indent=2) }}
+</project_analysis>
+
+<dockerfile>
+{{ dockerfile }}
+</dockerfile>
+
+{% if learnings %}
+<previous_learnings>
+{% for learning in learnings %}
+- {{ learning }}
+{% endfor %}
+</previous_learnings>
+{% endif %}
+
+{% if existing_compose %}
+<existing_compose>
+{{ existing_compose }}
+</existing_compose>
+{% endif %}
+
+{% if hints %}
+<user_hints>
+{{ hints }}
+</user_hints>
+{% endif %}
+
+Generate a docker-compose.yaml based on the analysis and Dockerfile above.\
+""")
 
 SYSTEM_PROMPT = """\
 <task>

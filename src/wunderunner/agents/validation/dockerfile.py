@@ -1,9 +1,34 @@
 """Dockerfile validation agent with grading rubric."""
 
+from jinja2 import Template
 from pydantic_ai import Agent
 
 from wunderunner.models.validation import ValidationResult
 from wunderunner.settings import Validation, get_model
+
+USER_PROMPT = Template("""\
+<dockerfile>
+{{ dockerfile }}
+</dockerfile>
+
+<project_analysis>
+{{ analysis | tojson(indent=2) }}
+</project_analysis>
+
+{% if previous_error %}
+<previous_build_error>
+{{ previous_error }}
+</previous_build_error>
+{% endif %}
+
+{% if hints %}
+<user_hints>
+{{ hints }}
+</user_hints>
+{% endif %}
+
+Grade this Dockerfile according to the rubric.\
+""")
 
 SYSTEM_PROMPT = """\
 <task>
