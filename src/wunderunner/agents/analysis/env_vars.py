@@ -112,7 +112,7 @@ Return list of EnvVar objects:
 </output_format>
 """
 
-env_vars_agent = Agent(
+agent = Agent(
     model=get_model("analysis"),
     output_type=list[EnvVar],
     deps_type=AgentDeps,
@@ -120,4 +120,4 @@ env_vars_agent = Agent(
     defer_model_check=True,
 )
 
-register_tools(env_vars_agent)
+register_tools(agent)

@@ -114,7 +114,7 @@ entry_point: Main file path - "src/index.ts", "main.py" (null if unclear)
 </output_fields>
 """
 
-project_structure_agent = Agent(
+agent = Agent(
     model=get_model("analysis"),
     output_type=ProjectStructure,
     deps_type=AgentDeps,
@@ -122,4 +122,4 @@ project_structure_agent = Agent(
     defer_model_check=True,
 )
 
-register_tools(project_structure_agent)
+register_tools(agent)

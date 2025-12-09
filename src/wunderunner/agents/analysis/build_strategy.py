@@ -136,7 +136,7 @@ multi_stage_recommended: Boolean - true if multi-stage Docker build is recommend
 </output_fields>
 """
 
-build_strategy_agent = Agent(
+agent = Agent(
     model=get_model("analysis"),
     output_type=BuildStrategy,
     deps_type=AgentDeps,
@@ -144,4 +144,4 @@ build_strategy_agent = Agent(
     defer_model_check=True,
 )
 
-register_tools(build_strategy_agent)
+register_tools(agent)

@@ -119,7 +119,7 @@ Return CodeStyle object:
 </output_format>
 """
 
-code_style_agent = Agent(
+agent = Agent(
     model=get_model("analysis"),
     output_type=CodeStyle,
     deps_type=AgentDeps,
@@ -127,4 +127,4 @@ code_style_agent = Agent(
     defer_model_check=True,
 )
 
-register_tools(code_style_agent)
+register_tools(agent)

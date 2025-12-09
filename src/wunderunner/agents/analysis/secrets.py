@@ -114,7 +114,7 @@ Return list of EnvVar objects:
 </output_format>
 """
 
-secrets_agent = Agent(
+agent = Agent(
     model=get_model("analysis"),
     output_type=list[EnvVar],
     deps_type=AgentDeps,
@@ -122,4 +122,4 @@ secrets_agent = Agent(
     defer_model_check=True,
 )
 
-register_tools(secrets_agent)
+register_tools(agent)

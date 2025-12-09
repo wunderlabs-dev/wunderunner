@@ -3,11 +3,11 @@
 from pathlib import Path
 
 from wunderunner.agents.analysis import (
-    build_strategy_agent,
-    code_style_agent,
-    env_vars_agent,
-    project_structure_agent,
-    secrets_agent,
+    build_strategy,
+    code_style,
+    env_vars,
+    project_structure,
+    secrets,
 )
 from wunderunner.agents.tools import AgentDeps
 from wunderunner.exceptions import AnalyzeError
@@ -58,21 +58,21 @@ async def analyze(path: Path, rebuild: bool = False) -> Analysis:
     deps = AgentDeps(project_dir=path)
 
     try:
-        structure_result = await project_structure_agent.run(deps=deps)
-        build_result = await build_strategy_agent.run(deps=deps)
-        env_result = await env_vars_agent.run(deps=deps)
-        secrets_result = await secrets_agent.run(deps=deps)
-        style_result = await code_style_agent.run(deps=deps)
+        structure = await project_structure.agent.run(deps=deps)
+        build = await build_strategy.agent.run(deps=deps)
+        env = await env_vars.agent.run(deps=deps)
+        secret = await secrets.agent.run(deps=deps)
+        style = await code_style.agent.run(deps=deps)
     except Exception as e:
         raise AnalyzeError(f"Analysis failed: {e}") from e
 
-    all_env_vars = _merge_env_vars(env_result.output, secrets_result.output)
+    all_env = _merge_env_vars(env.output, secret.output)
 
     analysis = Analysis(
-        project_structure=structure_result.output,
-        build_strategy=build_result.output,
-        env_vars=all_env_vars,
-        code_style=style_result.output,
+        project_structure=structure.output,
+        build_strategy=build.output,
+        env_vars=all_env,
+        code_style=style.output,
     )
 
     cache_path.parent.mkdir(exist_ok=True)
