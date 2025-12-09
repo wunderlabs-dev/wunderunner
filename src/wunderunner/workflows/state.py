@@ -46,3 +46,9 @@ class ContainerizeState:
 
     # Validation tracking
     last_validation_grade: int | None = None
+
+    # Confidence tracking (from Dockerfile generation)
+    last_confidence: int | None = None
+
+    # Conversation history for stateful Dockerfile generation
+    dockerfile_messages: list = field(default_factory=list)

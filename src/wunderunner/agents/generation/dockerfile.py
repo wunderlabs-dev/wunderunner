@@ -4,12 +4,32 @@ from jinja2 import Template
 from pydantic_ai import Agent
 
 from wunderunner.agents.tools import AgentDeps, register_tools
+from wunderunner.models.generation import DockerfileResult
 from wunderunner.settings import Generation, get_model
 
 USER_PROMPT = Template("""\
 <project_analysis>
 {{ analysis | tojson(indent=2) }}
 </project_analysis>
+
+{% if context_summary %}
+<historical_learnings>
+Summary of past attempts and fixes:
+{{ context_summary }}
+</historical_learnings>
+{% endif %}
+
+{% if historical_fixes %}
+<recent_fixes>
+Recent fixes that worked - DO NOT undo them:
+{% for fix in historical_fixes %}
+- {{ fix.explanation }}
+{%- if fix.fix %}
+  Fix applied: {{ fix.fix }}
+{%- endif %}
+{% endfor %}
+</recent_fixes>
+{% endif %}
 
 {% if learnings %}
 <previous_learnings>
@@ -26,6 +46,11 @@ USER_PROMPT = Template("""\
 <existing_dockerfile>
 {{ existing_dockerfile }}
 </existing_dockerfile>
+
+IMPORTANT: You have tools available (read_file, list_dir, grep, glob).
+USE THEM to investigate the root cause before making changes.
+Don't guess - look at the actual files mentioned in errors.
+
 Refine the above Dockerfile to fix the issues in previous_learnings.
 {% else %}
 Generate a new Dockerfile for this project.
@@ -248,14 +273,31 @@ CMD ["node", "packages/web/dist/main.js"]
 </monorepo_handling>
 
 <output_format>
-Return ONLY the Dockerfile content as a string. No markdown, no explanation, no code blocks.
-Just the raw Dockerfile content starting with FROM.
+Return a structured result with:
+- dockerfile: The Dockerfile content (starting with FROM, no markdown)
+- confidence: Score 0-10
+  - 9-10: Proven pattern, high certainty
+  - 6-8: Reasonable solution based on investigation
+  - 3-5: Uncertain, best guess
+  - 0-2: Very uncertain, may need more info
+- reasoning: Brief explanation of your approach and what you fixed (1-2 sentences)
 </output_format>
+
+<tool_usage>
+When refining a Dockerfile after errors, USE YOUR TOOLS:
+- read_file("package.json") - Check actual dependencies, scripts, versions
+- read_file("pyproject.toml") - Check Python project config
+- list_dir(".") - See what files actually exist
+- grep("pattern", ".") - Find where something is used
+- glob("*.lock") - Find lockfiles
+
+INVESTIGATE before guessing. The error message often points to specific files - READ THEM.
+</tool_usage>
 """
 
 agent = Agent(
     model=get_model(Generation.DOCKERFILE),
-    output_type=str,
+    output_type=DockerfileResult,
     deps_type=AgentDeps,
     system_prompt=SYSTEM_PROMPT,
     defer_model_check=True,

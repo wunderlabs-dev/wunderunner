@@ -54,7 +54,13 @@ class Validation(Enum):
     COMPOSE = "validation.compose"
 
 
-AgentType = Analysis | Generation | Validation
+class Context(Enum):
+    """Context management agent types."""
+
+    SUMMARIZER = "context.summarizer"
+
+
+AgentType = Analysis | Generation | Validation | Context
 
 
 # Model preferences per agent (best choice when both providers available)
@@ -97,6 +103,11 @@ _PREFERRED_MODELS: dict[AgentType, dict[str, str]] = {
     Validation.COMPOSE: {
         "anthropic": "anthropic:claude-sonnet-4-5-20250929",
         "openai": "openai:gpt-4o",
+    },
+    # Context agents (use cheaper models for summarization)
+    Context.SUMMARIZER: {
+        "anthropic": "anthropic:claude-haiku-3-5-20241022",
+        "openai": "openai:gpt-4o-mini",
     },
 }
 

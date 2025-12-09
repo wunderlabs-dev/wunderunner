@@ -78,14 +78,34 @@ class Dockerfile(BaseNode[ContainerizeState]):
 
         try:
             with console.status(f"[bold blue]{action} Dockerfile..."):
-                ctx.state.dockerfile_content = await dockerfile.generate(
+                gen_result = await dockerfile.generate(
                     ctx.state.analysis,
                     ctx.state.learnings,
                     ctx.state.hints,
                     existing=ctx.state.dockerfile_content,
                     project_path=ctx.state.path,
+                    message_history=ctx.state.dockerfile_messages,
                 )
-            console.print(f"  [green]✓[/green] Dockerfile {action.lower()[:-3]}ed")
+
+            # Store results and conversation history for next retry
+            ctx.state.dockerfile_content = gen_result.result.dockerfile
+            ctx.state.last_confidence = gen_result.result.confidence
+            ctx.state.dockerfile_messages = gen_result.messages
+
+            # Show confidence and any regression warnings
+            conf = gen_result.result.confidence
+            if conf >= 7:
+                color = "green"
+            elif conf >= 4:
+                color = "yellow"
+            else:
+                color = "red"
+
+            status = f"{action.lower()[:-3]}ed (confidence: [{color}]{conf}/10[/{color}])"
+            if "REGRESSION" in gen_result.result.reasoning:
+                status += " [yellow]⚠ regression detected[/yellow]"
+            console.print(f"  [green]✓[/green] Dockerfile {status}")
+
             return Validate()
         except DockerfileError as e:
             console.print("  [red]✗[/red] Dockerfile generation failed")
@@ -188,13 +208,19 @@ class Build(BaseNode[ContainerizeState]):
 
         try:
             with console.status("[bold blue]Building Docker image..."):
-                await docker.build(ctx.state.path, ctx.state.dockerfile_content)
-            console.print("  [green]✓[/green] Docker image built")
+                _, cache_hit = await docker.build(
+                    ctx.state.path,
+                    ctx.state.dockerfile_content,
+                )
+            if cache_hit:
+                console.print("  [green]✓[/green] Docker image found in cache")
+            else:
+                console.print("  [green]✓[/green] Docker image built")
             return Start()
         except BuildError as e:
             console.print("  [red]✗[/red] Docker build failed")
             error_msg = str(e)
-            # Extract last 10 lines of build output for context
+            # Extract last 15 lines of build output for context
             lines = error_msg.split("\n")
             if len(lines) > 15:
                 error_msg = "\n".join(lines[-15:])
