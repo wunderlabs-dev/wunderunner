@@ -1,10 +1,14 @@
 """Command-line interface for wunderunner."""
 
+import asyncio
+import sys
 from pathlib import Path
 from typing import Annotated
 
 import typer
 from rich.console import Console
+
+from wunderunner.workflows import ContainerizeContext, Failure, containerize
 
 app = typer.Typer(
     name="wunderunner",
@@ -45,8 +49,14 @@ def init(
     if rebuild:
         console.print("[dim]Cache:[/dim] Ignoring cached analysis (--rebuild)")
 
-    # TODO: Implement the actual workflow
-    console.print("\n[yellow]Implementation coming soon...[/yellow]")
+    ctx = ContainerizeContext(path=project_path, rebuild=rebuild)
+    try:
+        asyncio.run(containerize(ctx))
+    except Failure:
+        console.print("\n[red]✗ Containerization failed after max attempts[/red]")
+        sys.exit(1)
+
+    console.print("\n[green]✓ Containerization complete[/green]")
 
 
 if __name__ == "__main__":
