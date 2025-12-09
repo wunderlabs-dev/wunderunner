@@ -3,8 +3,7 @@
 from dataclasses import dataclass
 from pathlib import Path
 
-from wunderunner.activities.project import Analysis
-from wunderunner.exceptions import HealthcheckError, ServicesError, StartError
+from wunderunner.models.analysis import Analysis
 from wunderunner.workflows.base import Learning
 
 

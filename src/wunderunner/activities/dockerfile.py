@@ -1,7 +1,6 @@
 """Dockerfile generation activity."""
 
-from wunderunner.activities.project import Analysis
-from wunderunner.exceptions import DockerfileError
+from wunderunner.models.analysis import Analysis
 from wunderunner.workflows.base import Learning
 
 
