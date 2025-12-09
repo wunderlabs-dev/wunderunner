@@ -11,80 +11,6 @@ from wunderunner.settings import get_settings
 from wunderunner.workflows.state import Learning
 
 
-def _format_learnings(learnings: list[Learning]) -> str:
-    """Format learnings for the prompt."""
-    if not learnings:
-        return "None"
-
-    lines = []
-    for learning in learnings:
-        lines.append(f"- [{learning.phase}] {learning.error_type}: {learning.error_message}")
-        if learning.context:
-            lines.append(f"  Context: {learning.context}")
-    return "\n".join(lines)
-
-
-def _build_prompt(
-    analysis: Analysis,
-    dockerfile_content: str,
-    learnings: list[Learning],
-    hints: list[str],
-    existing: str | None,
-) -> str:
-    """Build the user prompt for the compose agent."""
-    parts = []
-
-    # Project analysis
-    parts.append("<project_analysis>")
-    parts.append(f"Runtime: {analysis.project_structure.runtime}")
-    if analysis.project_structure.runtime_version:
-        parts.append(f"Runtime Version: {analysis.project_structure.runtime_version}")
-    if analysis.project_structure.framework:
-        parts.append(f"Framework: {analysis.project_structure.framework}")
-    parts.append(f"Package Manager: {analysis.project_structure.package_manager}")
-    if analysis.project_structure.entry_point:
-        parts.append(f"Entry Point: {analysis.project_structure.entry_point}")
-    parts.append("</project_analysis>")
-
-    # Environment variables
-    if analysis.env_vars:
-        parts.append("\n<environment_variables>")
-        for var in analysis.env_vars:
-            secret_marker = " [SECRET]" if var.secret else ""
-            default_hint = f" (default: {var.default})" if var.default else ""
-            service_hint = f" (service: {var.service})" if var.service else ""
-            parts.append(f"- {var.name}{secret_marker}{default_hint}{service_hint}")
-        parts.append("</environment_variables>")
-
-    # Dockerfile being used
-    parts.append("\n<dockerfile>")
-    parts.append(dockerfile_content)
-    parts.append("</dockerfile>")
-
-    # Previous learnings
-    parts.append("\n<previous_learnings>")
-    parts.append(_format_learnings(learnings))
-    parts.append("</previous_learnings>")
-
-    # User hints
-    if hints:
-        parts.append("\n<user_hints>")
-        for hint in hints:
-            parts.append(f"- {hint}")
-        parts.append("</user_hints>")
-
-    # Existing compose file to refine
-    if existing:
-        parts.append("\n<existing_compose>")
-        parts.append(existing)
-        parts.append("</existing_compose>")
-        parts.append("\nRefine the above docker-compose.yaml to fix the issues.")
-    else:
-        parts.append("\nGenerate a new docker-compose.yaml for this project.")
-
-    return "\n".join(parts)
-
-
 async def generate(
     analysis: Analysis,
     dockerfile_content: str,
@@ -109,7 +35,13 @@ async def generate(
     Raises:
         ServicesError: If generation/refinement fails.
     """
-    prompt = _build_prompt(analysis, dockerfile_content, learnings, hints, existing)
+    prompt = compose_agent.USER_PROMPT.render(
+        analysis=analysis.model_dump(),
+        dockerfile=dockerfile_content,
+        learnings=learnings,
+        hints=hints,
+        existing_compose=existing,
+    )
 
     deps = AgentDeps(project_dir=project_path) if project_path else None
 

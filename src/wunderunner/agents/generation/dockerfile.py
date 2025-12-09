@@ -14,7 +14,10 @@ USER_PROMPT = Template("""\
 {% if learnings %}
 <previous_learnings>
 {% for learning in learnings %}
-- {{ learning }}
+- [{{ learning.phase }}] {{ learning.error_type }}: {{ learning.error_message }}
+{%- if learning.context %}
+  Context: {{ learning.context }}
+{%- endif %}
 {% endfor %}
 </previous_learnings>
 {% endif %}
@@ -23,15 +26,18 @@ USER_PROMPT = Template("""\
 <existing_dockerfile>
 {{ existing_dockerfile }}
 </existing_dockerfile>
+Refine the above Dockerfile to fix the issues in previous_learnings.
+{% else %}
+Generate a new Dockerfile for this project.
 {% endif %}
 
 {% if hints %}
 <user_hints>
-{{ hints }}
+{% for hint in hints %}
+- {{ hint }}
+{% endfor %}
 </user_hints>
-{% endif %}
-
-Generate a Dockerfile based on the analysis above.\
+{% endif %}\
 """)
 
 SYSTEM_PROMPT = """\

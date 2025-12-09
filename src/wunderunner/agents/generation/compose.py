@@ -18,7 +18,10 @@ USER_PROMPT = Template("""\
 {% if learnings %}
 <previous_learnings>
 {% for learning in learnings %}
-- {{ learning }}
+- [{{ learning.phase }}] {{ learning.error_type }}: {{ learning.error_message }}
+{%- if learning.context %}
+  Context: {{ learning.context }}
+{%- endif %}
 {% endfor %}
 </previous_learnings>
 {% endif %}
@@ -27,15 +30,18 @@ USER_PROMPT = Template("""\
 <existing_compose>
 {{ existing_compose }}
 </existing_compose>
+Refine the above docker-compose.yaml to fix the issues.
+{% else %}
+Generate a new docker-compose.yaml for this project.
 {% endif %}
 
 {% if hints %}
 <user_hints>
-{{ hints }}
+{% for hint in hints %}
+- {{ hint }}
+{% endfor %}
 </user_hints>
-{% endif %}
-
-Generate a docker-compose.yaml based on the analysis and Dockerfile above.\
+{% endif %}\
 """)
 
 SYSTEM_PROMPT = """\
