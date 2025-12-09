@@ -1,5 +1,6 @@
 """Application settings and model selection."""
 
+from enum import Enum
 from functools import lru_cache
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -29,21 +30,66 @@ def get_settings() -> Settings:
     return Settings()
 
 
-# Model preferences per task (best choice when both providers available)
-_PREFERRED_MODELS: dict[str, dict[str, str]] = {
-    "analysis": {
+class Analysis(Enum):
+    """Analysis agent types."""
+
+    PROJECT_STRUCTURE = "analysis.project_structure"
+    BUILD_STRATEGY = "analysis.build_strategy"
+    ENV_VARS = "analysis.env_vars"
+    SECRETS = "analysis.secrets"
+    CODE_STYLE = "analysis.code_style"
+
+
+class Generation(Enum):
+    """Generation agent types."""
+
+    DOCKERFILE = "generation.dockerfile"
+    COMPOSE = "generation.compose"
+
+
+class Validation(Enum):
+    """Validation agent types."""
+
+    VALIDATION = "validation.validation"
+
+
+AgentType = Analysis | Generation | Validation
+
+
+# Model preferences per agent (best choice when both providers available)
+_PREFERRED_MODELS: dict[AgentType, dict[str, str]] = {
+    # Analysis agents
+    Analysis.PROJECT_STRUCTURE: {
         "anthropic": "anthropic:claude-sonnet-4-5-20250929",
         "openai": "openai:gpt-4o",
     },
-    "dockerfile": {
+    Analysis.BUILD_STRATEGY: {
         "anthropic": "anthropic:claude-sonnet-4-5-20250929",
         "openai": "openai:gpt-4o",
     },
-    "compose": {
+    Analysis.ENV_VARS: {
         "anthropic": "anthropic:claude-sonnet-4-5-20250929",
         "openai": "openai:gpt-4o",
     },
-    "validation": {
+    Analysis.SECRETS: {
+        "anthropic": "anthropic:claude-sonnet-4-5-20250929",
+        "openai": "openai:gpt-4o",
+    },
+    Analysis.CODE_STYLE: {
+        "anthropic": "anthropic:claude-haiku-3-5-20241022",
+        "openai": "openai:gpt-4o-mini",
+    },
+    # Generation agents
+    Generation.DOCKERFILE: {
+        "anthropic": "anthropic:claude-sonnet-4-5-20250929",
+        "openai": "openai:gpt-4o",
+    },
+    Generation.COMPOSE: {
+        "anthropic": "anthropic:claude-sonnet-4-5-20250929",
+        "openai": "openai:gpt-4o",
+    },
+    # Validation agents
+    Validation.VALIDATION: {
         "anthropic": "anthropic:claude-sonnet-4-5-20250929",
         "openai": "openai:gpt-4o",
     },
@@ -83,21 +129,21 @@ def get_available_provider() -> str:
     raise NoAPIKeyError()
 
 
-def get_model(task: str) -> str:
-    """Get the best available model for a given task.
+def get_model(agent: AgentType) -> str:
+    """Get the best available model for a given agent.
 
     Args:
-        task: The task type (analysis, dockerfile, compose, validation)
+        agent: The agent type enum value (e.g., Analysis.CODE_STYLE)
 
     Returns:
         Model string in pydantic-ai format (e.g., "anthropic:claude-sonnet-4-5-20250929")
 
     Raises:
         NoAPIKeyError: If no API keys are configured
-        ValueError: If task is unknown
+        ValueError: If agent type is unknown
     """
-    if task not in _PREFERRED_MODELS:
-        raise ValueError(f"Unknown task: {task}. Valid tasks: {list(_PREFERRED_MODELS.keys())}")
+    if agent not in _PREFERRED_MODELS:
+        raise ValueError(f"Unknown agent type: {agent}")
 
     provider = get_available_provider()
-    return _PREFERRED_MODELS[task][provider]
+    return _PREFERRED_MODELS[agent][provider]

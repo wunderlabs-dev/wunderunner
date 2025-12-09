@@ -4,7 +4,7 @@ from pydantic_ai import Agent
 
 from wunderunner.agents.tools import AgentDeps, register_tools
 from wunderunner.models.analysis import EnvVar
-from wunderunner.settings import get_model
+from wunderunner.settings import Analysis, get_model
 
 SYSTEM_PROMPT = """\
 <task>
@@ -113,7 +113,7 @@ Return list of EnvVar objects:
 """
 
 agent = Agent(
-    model=get_model("analysis"),
+    model=get_model(Analysis.ENV_VARS),
     output_type=list[EnvVar],
     deps_type=AgentDeps,
     system_prompt=SYSTEM_PROMPT,

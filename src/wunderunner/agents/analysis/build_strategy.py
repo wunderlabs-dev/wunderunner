@@ -4,7 +4,7 @@ from pydantic_ai import Agent
 
 from wunderunner.agents.tools import AgentDeps, register_tools
 from wunderunner.models.analysis import BuildStrategy
-from wunderunner.settings import get_model
+from wunderunner.settings import Analysis, get_model
 
 SYSTEM_PROMPT = """\
 <task>
@@ -137,7 +137,7 @@ multi_stage_recommended: Boolean - true if multi-stage Docker build is recommend
 """
 
 agent = Agent(
-    model=get_model("analysis"),
+    model=get_model(Analysis.BUILD_STRATEGY),
     output_type=BuildStrategy,
     deps_type=AgentDeps,
     system_prompt=SYSTEM_PROMPT,

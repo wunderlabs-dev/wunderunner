@@ -4,7 +4,7 @@ from pydantic_ai import Agent
 
 from wunderunner.agents.tools import AgentDeps, register_tools
 from wunderunner.models.analysis import CodeStyle
-from wunderunner.settings import get_model
+from wunderunner.settings import Analysis, get_model
 
 SYSTEM_PROMPT = """\
 <task>
@@ -120,7 +120,7 @@ Return CodeStyle object:
 """
 
 agent = Agent(
-    model=get_model("analysis"),
+    model=get_model(Analysis.CODE_STYLE),
     output_type=CodeStyle,
     deps_type=AgentDeps,
     system_prompt=SYSTEM_PROMPT,

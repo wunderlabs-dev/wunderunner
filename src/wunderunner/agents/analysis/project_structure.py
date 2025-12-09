@@ -4,7 +4,7 @@ from pydantic_ai import Agent
 
 from wunderunner.agents.tools import AgentDeps, register_tools
 from wunderunner.models.analysis import ProjectStructure
-from wunderunner.settings import get_model
+from wunderunner.settings import Analysis, get_model
 
 SYSTEM_PROMPT = """\
 <task>
@@ -115,7 +115,7 @@ entry_point: Main file path - "src/index.ts", "main.py" (null if unclear)
 """
 
 agent = Agent(
-    model=get_model("analysis"),
+    model=get_model(Analysis.PROJECT_STRUCTURE),
     output_type=ProjectStructure,
     deps_type=AgentDeps,
     system_prompt=SYSTEM_PROMPT,
