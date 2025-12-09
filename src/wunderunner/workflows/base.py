@@ -1,9 +1,8 @@
 """Base types for workflows."""
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
-from typing import Literal
 
 
 class Phase(Enum):
@@ -37,15 +36,6 @@ class ContainerizeContext:
 class Success:
     """Successful workflow completion."""
 
-    status: Literal["success"] = "success"
 
-
-@dataclass
-class Failure:
-    """Failed workflow completion."""
-
-    status: Literal["failure"] = "failure"
-    learnings: list[Learning] = field(default_factory=list)
-
-
-ContainerizeResult = Success | Failure
+class Failure(Exception):
+    """Workflow failed."""

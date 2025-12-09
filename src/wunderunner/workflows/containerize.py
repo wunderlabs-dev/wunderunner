@@ -1,10 +1,9 @@
 """Main containerize workflow."""
 
 from wunderunner.activities import docker, dockerfile, project, services
-from wunderunner.exceptions import AnalyzeError
+from wunderunner.settings import get_settings
 from wunderunner.workflows.base import (
     ContainerizeContext,
-    ContainerizeResult,
     Failure,
     Learning,
     Phase,
@@ -12,19 +11,16 @@ from wunderunner.workflows.base import (
 )
 from wunderunner.workflows.run import Retry, phase
 
-MAX_ATTEMPTS = 3
 
-
-async def containerize(ctx: ContainerizeContext) -> ContainerizeResult:
+async def containerize(ctx: ContainerizeContext) -> Success:
     """Analyze project and generate Docker configuration with retry on failures."""
-    try:
-        analysis = await project.analyze(ctx.path, ctx.rebuild)
-    except AnalyzeError as e:
-        return Failure(learnings=[Learning(phase=Phase.ANALYZE, error=e)])
-
+    settings = get_settings()
     learnings: list[Learning] = []
 
-    for _ in range(MAX_ATTEMPTS):
+    with phase(Phase.ANALYZE, learnings):
+        analysis = await project.analyze(ctx.path, ctx.rebuild)
+
+    for _ in range(settings.max_attempts):
         try:
             with phase(Phase.DOCKERFILE, learnings):
                 dockerfile_content = await dockerfile.generate(analysis, learnings)
@@ -45,4 +41,4 @@ async def containerize(ctx: ContainerizeContext) -> ContainerizeResult:
         except Retry:
             continue
 
-    return Failure(learnings=learnings)
+    raise Failure
