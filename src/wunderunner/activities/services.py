@@ -3,6 +3,8 @@
 import asyncio
 from pathlib import Path
 
+import httpx
+
 from wunderunner.agents.generation import compose as compose_agent
 from wunderunner.agents.tools import AgentDeps
 from wunderunner.exceptions import HealthcheckError, ServicesError, StartError
@@ -166,9 +168,9 @@ async def stop(path: Path) -> None:
 
 
 async def healthcheck(container_ids: list[str], timeout: int = 60) -> None:
-    """Check health of running containers.
+    """Check health of running containers with HTTP probes.
 
-    Waits for containers to be healthy or running for the specified timeout.
+    First waits for containers to be running, then probes exposed HTTP ports.
 
     Args:
         container_ids: List of container IDs to check.
@@ -182,12 +184,13 @@ async def healthcheck(container_ids: list[str], timeout: int = 60) -> None:
 
     start_time = asyncio.get_event_loop().time()
 
+    # Phase 1: Wait for containers to be running
     while True:
         elapsed = asyncio.get_event_loop().time() - start_time
         if elapsed > timeout:
             raise HealthcheckError(f"Health check timed out after {timeout}s")
 
-        all_healthy = True
+        all_running = True
         for container_id in container_ids:
             status = await _get_container_status(container_id)
 
@@ -195,13 +198,96 @@ async def healthcheck(container_ids: list[str], timeout: int = 60) -> None:
                 logs = await _get_container_logs(container_id)
                 raise HealthcheckError(f"Container {container_id[:12]} exited:\n{logs}")
 
-            if status not in ("running", "healthy"):
-                all_healthy = False
+            if status != "running":
+                all_running = False
 
-        if all_healthy:
-            return
+        if all_running:
+            break
 
-        await asyncio.sleep(2)
+        await asyncio.sleep(1)
+
+    # Phase 2: HTTP health probes for containers with exposed ports
+    http_targets = await _get_http_targets(container_ids)
+
+    if not http_targets:
+        return  # No HTTP ports to probe
+
+    async with httpx.AsyncClient(timeout=5.0) as client:
+        while True:
+            elapsed = asyncio.get_event_loop().time() - start_time
+            if elapsed > timeout:
+                raise HealthcheckError(f"HTTP health check timed out after {timeout}s")
+
+            all_healthy = True
+            for url in http_targets:
+                try:
+                    response = await client.get(url)
+                    if response.status_code >= 500:
+                        all_healthy = False
+                except httpx.RequestError:
+                    all_healthy = False
+
+            if all_healthy:
+                return
+
+            await asyncio.sleep(2)
+
+
+async def _get_http_targets(container_ids: list[str]) -> list[str]:
+    """Get HTTP URLs for containers with exposed ports.
+
+    Returns URLs for localhost with the host port mapping.
+    Only returns ports that look like HTTP (common web ports).
+    """
+    http_ports = {80, 443, 3000, 5000, 8000, 8080, 8888, 9000}
+    targets = []
+
+    for container_id in container_ids:
+        ports = await _get_container_ports(container_id)
+        for host_port, container_port in ports:
+            if container_port in http_ports:
+                targets.append(f"http://localhost:{host_port}")
+
+    return targets
+
+
+async def _get_container_ports(container_id: str) -> list[tuple[int, int]]:
+    """Get port mappings for a container as (host_port, container_port) tuples."""
+    cmd = [
+        "docker",
+        "inspect",
+        "--format",
+        '{{range $p, $conf := .NetworkSettings.Ports}}'
+        '{{if $conf}}{{(index $conf 0).HostPort}}:{{$p}}{{end}} '
+        '{{end}}',
+        container_id,
+    ]
+
+    process = await asyncio.create_subprocess_exec(
+        *cmd,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+    )
+
+    stdout, _ = await process.communicate()
+    output = stdout.decode().strip()
+
+    if not output:
+        return []
+
+    ports = []
+    for mapping in output.split():
+        if ":" not in mapping:
+            continue
+        host_port, container_port = mapping.split(":", 1)
+        # container_port comes as "8000/tcp", extract just the number
+        container_port = container_port.split("/")[0]
+        try:
+            ports.append((int(host_port), int(container_port)))
+        except ValueError:
+            continue
+
+    return ports
 
 
 async def _get_container_status(container_id: str) -> str:
