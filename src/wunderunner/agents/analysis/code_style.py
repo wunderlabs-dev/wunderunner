@@ -6,6 +6,8 @@ from wunderunner.agents.tools import AgentDeps, register_tools
 from wunderunner.models.analysis import CodeStyle
 from wunderunner.settings import Analysis, get_model
 
+USER_PROMPT = "Analyze this project's code style, tooling, and Docker configuration."
+
 SYSTEM_PROMPT = """\
 <task>
 Analyze a project's code style, tooling, and existing Docker configuration. This helps

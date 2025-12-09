@@ -6,6 +6,8 @@ from wunderunner.agents.tools import AgentDeps, register_tools
 from wunderunner.models.analysis import BuildStrategy
 from wunderunner.settings import Analysis, get_model
 
+USER_PROMPT = "Analyze this project's build strategy, commands, and dependencies."
+
 SYSTEM_PROMPT = """\
 <task>
 Analyze a software project to determine how to build and run it in a container. Identify

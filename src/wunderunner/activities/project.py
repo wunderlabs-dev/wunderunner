@@ -59,11 +59,11 @@ async def analyze(path: Path, rebuild: bool = False) -> Analysis:
 
     try:
         structure, build, env, secret, style = await asyncio.gather(
-            project_structure.agent.run(deps=deps),
-            build_strategy.agent.run(deps=deps),
-            env_vars.agent.run(deps=deps),
-            secrets.agent.run(deps=deps),
-            code_style.agent.run(deps=deps),
+            project_structure.agent.run(project_structure.USER_PROMPT, deps=deps),
+            build_strategy.agent.run(build_strategy.USER_PROMPT, deps=deps),
+            env_vars.agent.run(env_vars.USER_PROMPT, deps=deps),
+            secrets.agent.run(secrets.USER_PROMPT, deps=deps),
+            code_style.agent.run(code_style.USER_PROMPT, deps=deps),
         )
     except Exception as e:
         raise AnalyzeError(f"Analysis failed: {e}") from e

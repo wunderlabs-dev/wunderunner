@@ -5,7 +5,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from pydantic_graph import BaseNode, End, Graph, GraphRunContext
-from rich.console import Console
 from rich.prompt import Prompt
 
 from wunderunner.activities import docker, dockerfile, project, services, validation
@@ -33,8 +32,14 @@ class Analyze(BaseNode[ContainerizeState]):
     """Run analysis agents and check for secrets."""
 
     async def run(self, ctx: Ctx) -> CollectSecrets | Dockerfile:
-        analysis = await project.analyze(ctx.state.path, ctx.state.rebuild)
+        console = ctx.state.console
+        with console.status("[bold blue]Analyzing project..."):
+            analysis = await project.analyze(ctx.state.path, ctx.state.rebuild)
         ctx.state.analysis = analysis
+
+        runtime = analysis.project_structure.runtime
+        framework = analysis.project_structure.framework or "no framework"
+        console.print(f"  [green]✓[/green] Detected {runtime} ({framework})")
 
         secrets = [v for v in analysis.env_vars if v.secret]
         if secrets:
@@ -47,7 +52,7 @@ class CollectSecrets(BaseNode[ContainerizeState]):
     """Prompt user for secret values via CLI."""
 
     async def run(self, ctx: Ctx) -> Dockerfile:
-        console = Console()
+        console = ctx.state.console
         secrets = [v for v in ctx.state.analysis.env_vars if v.secret]
 
         console.print("\n[yellow]Secrets required:[/yellow]")
@@ -67,16 +72,23 @@ class Dockerfile(BaseNode[ContainerizeState]):
     """Generate or refine Dockerfile."""
 
     async def run(self, ctx: Ctx) -> Validate | RetryOrHint:
+        console = ctx.state.console
+        is_refine = ctx.state.dockerfile_content is not None
+        action = "Refining" if is_refine else "Generating"
+
         try:
-            ctx.state.dockerfile_content = await dockerfile.generate(
-                ctx.state.analysis,
-                ctx.state.learnings,
-                ctx.state.hints,
-                existing=ctx.state.dockerfile_content,
-                project_path=ctx.state.path,
-            )
+            with console.status(f"[bold blue]{action} Dockerfile..."):
+                ctx.state.dockerfile_content = await dockerfile.generate(
+                    ctx.state.analysis,
+                    ctx.state.learnings,
+                    ctx.state.hints,
+                    existing=ctx.state.dockerfile_content,
+                    project_path=ctx.state.path,
+                )
+            console.print(f"  [green]✓[/green] Dockerfile {action.lower()[:-3]}ed")
             return Validate()
         except DockerfileError as e:
+            console.print("  [red]✗[/red] Dockerfile generation failed")
             learning = Learning(
                 phase="dockerfile",
                 error_type=type(e).__name__,
@@ -91,20 +103,23 @@ class Validate(BaseNode[ContainerizeState]):
     """Validate Dockerfile using two-tier validation (programmatic + LLM grading)."""
 
     async def run(self, ctx: Ctx) -> Services | RetryOrHint:
-        try:
-            result = await validation.validate(
-                ctx.state.dockerfile_content,
-                ctx.state.analysis,
-                ctx.state.learnings,
-            )
+        console = ctx.state.console
 
-            # Store validation result for debugging/logging
+        try:
+            with console.status("[bold blue]Validating Dockerfile..."):
+                result = await validation.validate(
+                    ctx.state.dockerfile_content,
+                    ctx.state.analysis,
+                    ctx.state.learnings,
+                )
+
             ctx.state.last_validation_grade = result.grade
 
             if result.is_valid:
+                console.print(f"  [green]✓[/green] Validation passed (grade: {result.grade}/100)")
                 return Services()
 
-            # Validation failed - create learning from feedback
+            console.print(f"  [yellow]![/yellow] Validation failed (grade: {result.grade}/100)")
             issues_text = "; ".join(result.issues) if result.issues else result.feedback
             learning = Learning(
                 phase="validation",
@@ -116,6 +131,7 @@ class Validate(BaseNode[ContainerizeState]):
             return RetryOrHint(learning=learning)
 
         except ValidationError as e:
+            console.print(f"  [red]✗[/red] Validation error: {e}")
             learning = Learning(
                 phase="validation",
                 error_type=type(e).__name__,
@@ -130,24 +146,30 @@ class Services(BaseNode[ContainerizeState]):
     """Generate or refine docker-compose.yaml."""
 
     async def run(self, ctx: Ctx) -> Build | RetryOrHint:
-        try:
-            ctx.state.compose_content = await services.generate(
-                ctx.state.analysis,
-                ctx.state.dockerfile_content,
-                ctx.state.learnings,
-                ctx.state.hints,
-                existing=ctx.state.compose_content,
-                project_path=ctx.state.path,
-            )
+        console = ctx.state.console
+        is_refine = ctx.state.compose_content is not None
+        action = "Refining" if is_refine else "Generating"
 
-            # Write compose file to disk for docker compose to use
+        try:
+            with console.status(f"[bold blue]{action} docker-compose.yaml..."):
+                ctx.state.compose_content = await services.generate(
+                    ctx.state.analysis,
+                    ctx.state.dockerfile_content,
+                    ctx.state.learnings,
+                    ctx.state.hints,
+                    existing=ctx.state.compose_content,
+                    project_path=ctx.state.path,
+                )
+
             settings = get_settings()
             compose_path = ctx.state.path / settings.cache_dir / "docker-compose.yaml"
             compose_path.parent.mkdir(parents=True, exist_ok=True)
             compose_path.write_text(ctx.state.compose_content)
 
+            console.print(f"  [green]✓[/green] docker-compose.yaml {action.lower()[:-3]}ed")
             return Build()
         except ServicesError as e:
+            console.print("  [red]✗[/red] Compose generation failed")
             learning = Learning(
                 phase="services",
                 error_type=type(e).__name__,
@@ -162,14 +184,24 @@ class Build(BaseNode[ContainerizeState]):
     """Build Docker image."""
 
     async def run(self, ctx: Ctx) -> Start | RetryOrHint:
+        console = ctx.state.console
+
         try:
-            await docker.build(ctx.state.path, ctx.state.dockerfile_content)
+            with console.status("[bold blue]Building Docker image..."):
+                await docker.build(ctx.state.path, ctx.state.dockerfile_content)
+            console.print("  [green]✓[/green] Docker image built")
             return Start()
         except BuildError as e:
+            console.print("  [red]✗[/red] Docker build failed")
+            error_msg = str(e)
+            # Extract last 10 lines of build output for context
+            lines = error_msg.split("\n")
+            if len(lines) > 15:
+                error_msg = "\n".join(lines[-15:])
             learning = Learning(
                 phase="build",
                 error_type=type(e).__name__,
-                error_message=str(e),
+                error_message=error_msg,
             )
             ctx.state.learnings.append(learning)
             return RetryOrHint(learning=learning)
@@ -180,10 +212,15 @@ class Start(BaseNode[ContainerizeState]):
     """Start containers with docker compose."""
 
     async def run(self, ctx: Ctx) -> Healthcheck | RetryOrHint:
+        console = ctx.state.console
+
         try:
-            ctx.state.container_ids = await services.start(ctx.state.path)
+            with console.status("[bold blue]Starting containers..."):
+                ctx.state.container_ids = await services.start(ctx.state.path)
+            console.print(f"  [green]✓[/green] Started {len(ctx.state.container_ids)} container(s)")
             return Healthcheck()
         except StartError as e:
+            console.print("  [red]✗[/red] Failed to start containers")
             learning = Learning(
                 phase="start",
                 error_type=type(e).__name__,
@@ -198,10 +235,15 @@ class Healthcheck(BaseNode[ContainerizeState]):
     """Check container health."""
 
     async def run(self, ctx: Ctx) -> End[Success] | RetryOrHint:
+        console = ctx.state.console
+
         try:
-            await services.healthcheck(ctx.state.container_ids)
+            with console.status("[bold blue]Checking container health..."):
+                await services.healthcheck(ctx.state.container_ids)
+            console.print("  [green]✓[/green] All containers healthy")
             return End(Success())
         except HealthcheckError as e:
+            console.print("  [red]✗[/red] Health check failed")
             learning = Learning(
                 phase="healthcheck",
                 error_type=type(e).__name__,
@@ -218,10 +260,13 @@ class RetryOrHint(BaseNode[ContainerizeState]):
     learning: Learning
 
     async def run(self, ctx: Ctx) -> Dockerfile | HumanHint:
+        console = ctx.state.console
         settings = get_settings()
         ctx.state.attempts_since_hint += 1
 
         if ctx.state.attempts_since_hint < settings.max_attempts:
+            remaining = settings.max_attempts - ctx.state.attempts_since_hint
+            console.print(f"  [dim]Retrying... ({remaining} attempts remaining)[/dim]")
             return Dockerfile()
         return HumanHint()
 
@@ -231,15 +276,28 @@ class HumanHint(BaseNode[ContainerizeState]):
     """Show errors and prompt user for hint."""
 
     async def run(self, ctx: Ctx) -> Dockerfile:
-        console = Console()
+        console = ctx.state.console
 
-        console.print("\n[red bold]Workflow failed after multiple attempts[/red bold]\n")
-        console.print("[yellow]Errors encountered:[/yellow]")
-        for learning in ctx.state.learnings:
-            console.print(f"  [{learning.phase}] {learning.error_message}")
+        console.print("\n[red bold]Workflow needs help after multiple attempts[/red bold]\n")
+
+        # Show last few errors (most recent first)
+        recent_learnings = ctx.state.learnings[-3:]
+        console.print("[yellow]Recent errors:[/yellow]")
+        for learning in reversed(recent_learnings):
+            console.print(f"  [bold]{learning.phase}[/bold]: {learning.error_type}")
+            # Truncate long error messages
+            msg = learning.error_message
+            if len(msg) > 200:
+                msg = msg[:200] + "..."
+            console.print(f"    {msg}")
+            if learning.context:
+                console.print(f"    [dim]Hint: {learning.context[:100]}...[/dim]")
 
         console.print()
-        hint = Prompt.ask("[cyan]Any hints to help fix this?[/cyan]")
+        hint = Prompt.ask("[cyan]Any hints to help fix this? (or 'q' to quit)[/cyan]")
+
+        if hint.lower() == "q":
+            raise KeyboardInterrupt()
 
         ctx.state.hints.append(hint)
         ctx.state.attempts_since_hint = 0

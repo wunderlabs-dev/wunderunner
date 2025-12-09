@@ -6,6 +6,8 @@ from wunderunner.agents.tools import AgentDeps, register_tools
 from wunderunner.models.analysis import EnvVar
 from wunderunner.settings import Analysis, get_model
 
+USER_PROMPT = "Discover all secrets, API keys, and credentials used by this project."
+
 SYSTEM_PROMPT = """\
 <task>
 Discover secrets, API keys, and credentials used by the project. Return a list of EnvVar

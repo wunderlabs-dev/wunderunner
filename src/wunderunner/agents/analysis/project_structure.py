@@ -6,6 +6,8 @@ from wunderunner.agents.tools import AgentDeps, register_tools
 from wunderunner.models.analysis import ProjectStructure
 from wunderunner.settings import Analysis, get_model
 
+USER_PROMPT = "Analyze this project's structure, runtime, and dependencies."
+
 SYSTEM_PROMPT = """\
 <task>
 Analyze a software project to identify its runtime, framework, package manager, and key

@@ -16,8 +16,6 @@ app = typer.Typer(
     help="AI-powered Docker configuration generator.",
 )
 
-console = Console()
-
 
 def _validate_project_path(path: Path) -> Path:
     if not path.exists():
@@ -45,20 +43,23 @@ def init(
 ) -> None:
     """Analyze a project and generate Docker configuration."""
     project_path = _validate_project_path(project_path)
+    console = Console()
 
-    console.print(f"[bold]Analyzing project:[/bold] {project_path}")
+    console.print(f"\n[bold]wunderunner[/bold] - containerizing {project_path.name}")
     if rebuild:
-        console.print("[dim]Cache:[/dim] Ignoring cached analysis (--rebuild)")
+        console.print("[dim]  (ignoring cache)[/dim]")
+    console.print()
 
-    state = ContainerizeState(path=project_path, rebuild=rebuild)
+    state = ContainerizeState(path=project_path, rebuild=rebuild, console=console)
 
     try:
         asyncio.run(containerize_graph.run(Analyze(), state=state))
     except KeyboardInterrupt:
-        console.print("\n[yellow]Interrupted by user[/yellow]")
+        console.print("\n[yellow]Cancelled[/yellow]")
         sys.exit(130)
 
-    console.print("\n[green]✓ Containerization complete[/green]")
+    console.print("\n[green bold]✓ Containerization complete![/green bold]")
+    console.print(f"  [dim]Files written to {project_path / '.wunderunner'}[/dim]\n")
 
 
 if __name__ == "__main__":

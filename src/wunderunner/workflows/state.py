@@ -3,6 +3,8 @@
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from rich.console import Console
+
 from wunderunner.models.analysis import Analysis
 
 
@@ -22,6 +24,7 @@ class ContainerizeState:
 
     path: Path
     rebuild: bool = False
+    console: Console = field(default_factory=Console)
 
     # Analysis result (set by Analyze node)
     analysis: Analysis | None = None
