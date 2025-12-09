@@ -15,10 +15,15 @@ USER_PROMPT = Template("""\
 {{ analysis | tojson(indent=2) }}
 </project_analysis>
 
-{% if previous_error %}
-<previous_build_error>
-{{ previous_error }}
-</previous_build_error>
+{% if learnings %}
+<previous_errors>
+{% for learning in learnings %}
+- [{{ learning.phase }}] {{ learning.error_type }}: {{ learning.error_message }}
+{%- if learning.context %}
+  Context: {{ learning.context }}
+{%- endif %}
+{% endfor %}
+</previous_errors>
 {% endif %}
 
 {% if hints %}
