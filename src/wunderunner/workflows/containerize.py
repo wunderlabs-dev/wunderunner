@@ -72,6 +72,7 @@ class Dockerfile(BaseNode[ContainerizeState]):
                 ctx.state.learnings,
                 ctx.state.hints,
                 existing=ctx.state.dockerfile_content,
+                project_path=ctx.state.path,
             )
             return Services()
         except DockerfileError as e:
