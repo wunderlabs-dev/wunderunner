@@ -1,0 +1,42 @@
+"""State for the containerize workflow."""
+
+from dataclasses import dataclass, field
+from pathlib import Path
+
+from wunderunner.models.analysis import Analysis
+
+
+@dataclass
+class Learning:
+    """Captured learning from a failed phase."""
+
+    phase: str
+    error_type: str
+    error_message: str
+    context: str | None = None
+
+
+@dataclass
+class ContainerizeState:
+    """Shared state for containerize workflow."""
+
+    path: Path
+    rebuild: bool = False
+
+    # Analysis result (set by Analyze node)
+    analysis: Analysis | None = None
+
+    # Secret values collected from user (name -> value)
+    secret_values: dict[str, str] = field(default_factory=dict)
+
+    # Accumulated learnings and hints
+    learnings: list[Learning] = field(default_factory=list)
+    hints: list[str] = field(default_factory=list)
+
+    # Retry tracking (reset after human hint)
+    attempts_since_hint: int = 0
+
+    # Intermediate artifacts (for persistence and refinement)
+    dockerfile_content: str | None = None
+    compose_content: str | None = None
+    container_ids: list[str] = field(default_factory=list)

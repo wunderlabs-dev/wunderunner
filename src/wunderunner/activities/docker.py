@@ -2,8 +2,6 @@
 
 from pathlib import Path
 
-from wunderunner.exceptions import BuildError
-
 
 async def build(path: Path, dockerfile_content: str) -> str:
     """Build Docker image from dockerfile content.

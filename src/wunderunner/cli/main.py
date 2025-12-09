@@ -8,7 +8,8 @@ from typing import Annotated
 import typer
 from rich.console import Console
 
-from wunderunner.workflows import ContainerizeContext, Failure, containerize
+from wunderunner.workflows.containerize import Analyze, containerize_graph
+from wunderunner.workflows.state import ContainerizeState
 
 app = typer.Typer(
     name="wunderunner",
@@ -49,12 +50,13 @@ def init(
     if rebuild:
         console.print("[dim]Cache:[/dim] Ignoring cached analysis (--rebuild)")
 
-    ctx = ContainerizeContext(path=project_path, rebuild=rebuild)
+    state = ContainerizeState(path=project_path, rebuild=rebuild)
+
     try:
-        asyncio.run(containerize(ctx))
-    except Failure:
-        console.print("\n[red]✗ Containerization failed after max attempts[/red]")
-        sys.exit(1)
+        asyncio.run(containerize_graph.run(Analyze(), state=state))
+    except KeyboardInterrupt:
+        console.print("\n[yellow]Interrupted by user[/yellow]")
+        sys.exit(130)
 
     console.print("\n[green]✓ Containerization complete[/green]")
 

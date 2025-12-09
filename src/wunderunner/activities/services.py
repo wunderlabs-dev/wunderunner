@@ -1,27 +1,32 @@
 """Services (docker-compose) activities."""
 
-from dataclasses import dataclass
 from pathlib import Path
 
 from wunderunner.models.analysis import Analysis
-from wunderunner.workflows.base import Learning
-
-
-@dataclass
-class ServicesConfig:
-    """Docker compose configuration."""
-
-    # TODO: Add actual config fields
-    content: str = ""
+from wunderunner.workflows.state import Learning
 
 
 async def generate(
-    analysis: Analysis, dockerfile_content: str, learnings: list[Learning]
-) -> ServicesConfig:
-    """Generate docker-compose.yaml based on analysis and learnings.
+    analysis: Analysis,
+    dockerfile_content: str,
+    learnings: list[Learning],
+    hints: list[str],
+    existing: str | None = None,
+) -> str:
+    """Generate or refine docker-compose.yaml based on analysis and learnings.
+
+    Args:
+        analysis: Project analysis result.
+        dockerfile_content: The Dockerfile being used.
+        learnings: Errors from previous attempts.
+        hints: User-provided hints.
+        existing: If provided, refine this compose file instead of generating fresh.
+
+    Returns:
+        docker-compose.yaml content as string.
 
     Raises:
-        ServicesError: If generation fails.
+        ServicesError: If generation/refinement fails.
     """
     # TODO: Implement with pydantic-ai agent
     raise NotImplementedError
