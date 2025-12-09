@@ -18,6 +18,10 @@ class Settings(BaseSettings):
     openai_api_key: str | None = None
     max_attempts: int = 3
 
+    # Cache settings
+    cache_dir: str = ".wunderunner"
+    analysis_cache_file: str = "analysis.json"
+
 
 @lru_cache
 def get_settings() -> Settings:

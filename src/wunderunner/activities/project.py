@@ -13,9 +13,7 @@ from wunderunner.agents.analysis import (
 from wunderunner.agents.tools import AgentDeps
 from wunderunner.exceptions import AnalyzeError
 from wunderunner.models.analysis import Analysis, EnvVar
-
-CACHE_DIR = ".wunderunner"
-CACHE_FILE = "analysis.json"
+from wunderunner.settings import get_settings
 
 
 def _merge_env_vars(env_vars: list[EnvVar], secrets: list[EnvVar]) -> list[EnvVar]:
@@ -48,7 +46,8 @@ async def analyze(path: Path, rebuild: bool = False) -> Analysis:
     Raises:
         AnalyzeError: If analysis fails.
     """
-    cache_path = path / CACHE_DIR / CACHE_FILE
+    settings = get_settings()
+    cache_path = path / settings.cache_dir / settings.analysis_cache_file
 
     if not rebuild and cache_path.exists():
         try:
