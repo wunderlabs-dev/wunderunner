@@ -1,5 +1,6 @@
 """Project analysis activity."""
 
+import asyncio
 from pathlib import Path
 
 from wunderunner.agents.analysis import (
@@ -58,11 +59,13 @@ async def analyze(path: Path, rebuild: bool = False) -> Analysis:
     deps = AgentDeps(project_dir=path)
 
     try:
-        structure = await project_structure.agent.run(deps=deps)
-        build = await build_strategy.agent.run(deps=deps)
-        env = await env_vars.agent.run(deps=deps)
-        secret = await secrets.agent.run(deps=deps)
-        style = await code_style.agent.run(deps=deps)
+        structure, build, env, secret, style = await asyncio.gather(
+            project_structure.agent.run(deps=deps),
+            build_strategy.agent.run(deps=deps),
+            env_vars.agent.run(deps=deps),
+            secrets.agent.run(deps=deps),
+            code_style.agent.run(deps=deps),
+        )
     except Exception as e:
         raise AnalyzeError(f"Analysis failed: {e}") from e
 
