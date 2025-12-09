@@ -108,7 +108,8 @@ Exclude from dependencies list:
 runtime: The language runtime - "node", "python", "go", "rust", "ruby", "java"
 runtime_version: Version string if found - "20", "3.11", "1.21" (null if not specified)
 framework: Web framework if detected - "nextjs", "fastapi", "gin" (null if none)
-package_manager: Package manager - "npm", "yarn", "pnpm", "uv", "pip", "poetry", "cargo"
+package_manager: Package manager - "npm", "yarn", "pnpm", "bun", "uv", "pip", "poetry", "cargo"
+package_manager_version: Corepack version string - "pnpm@9.1.0" (null if not specified)
 dependencies: List of 10-15 key production dependencies
 entry_point: Main file path - "src/index.ts", "main.py" (null if unclear)
 </output_fields>

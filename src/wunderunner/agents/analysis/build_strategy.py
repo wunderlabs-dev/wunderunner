@@ -129,7 +129,7 @@ Rust:
 monorepo: Boolean - true if this is a monorepo with workspaces
 monorepo_tool: String or null - "turborepo", "nx", "pnpm workspaces", etc.
 workspaces: List of workspace paths - ["packages/web", "packages/api"]
-native_dependencies: Boolean - true if native compilation is needed
+native_dependencies: List of packages needing native compilation - ["sharp", "bcrypt", "psycopg2"]
 build_command: String or null - "npm run build", "go build -o app ."
 start_command: String or null - "npm start", "./app"
 multi_stage_recommended: Boolean - true if multi-stage Docker build is recommended

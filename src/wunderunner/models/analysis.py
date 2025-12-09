@@ -10,6 +10,7 @@ class ProjectStructure(BaseModel):
     runtime: str
     runtime_version: str | None = None
     package_manager: str | None = None
+    package_manager_version: str | None = None  # For corepack (e.g., "pnpm@9.1.0")
     dependencies: list[str] = []
     entry_point: str | None = None
 
@@ -20,7 +21,7 @@ class BuildStrategy(BaseModel):
     monorepo: bool = False
     monorepo_tool: str | None = None
     workspaces: list[str] = []
-    native_dependencies: bool = False
+    native_dependencies: list[str] = []  # e.g., ["sharp", "bcrypt", "canvas"]
     build_command: str | None = None
     start_command: str | None = None
     multi_stage_recommended: bool = False
