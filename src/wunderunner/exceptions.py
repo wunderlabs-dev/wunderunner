@@ -27,3 +27,7 @@ class StartError(WunderunnerError):
 
 class HealthcheckError(WunderunnerError):
     """Services failed healthcheck."""
+
+
+class ValidationError(WunderunnerError):
+    """Failed to validate generated artifacts."""

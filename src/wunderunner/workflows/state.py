@@ -40,3 +40,6 @@ class ContainerizeState:
     dockerfile_content: str | None = None
     compose_content: str | None = None
     container_ids: list[str] = field(default_factory=list)
+
+    # Validation tracking
+    last_validation_grade: int | None = None

@@ -50,7 +50,8 @@ class Generation(Enum):
 class Validation(Enum):
     """Validation agent types."""
 
-    VALIDATION = "validation.validation"
+    DOCKERFILE = "validation.dockerfile"
+    COMPOSE = "validation.compose"
 
 
 AgentType = Analysis | Generation | Validation
@@ -89,7 +90,11 @@ _PREFERRED_MODELS: dict[AgentType, dict[str, str]] = {
         "openai": "openai:gpt-4o",
     },
     # Validation agents
-    Validation.VALIDATION: {
+    Validation.DOCKERFILE: {
+        "anthropic": "anthropic:claude-sonnet-4-5-20250929",
+        "openai": "openai:gpt-4o",
+    },
+    Validation.COMPOSE: {
         "anthropic": "anthropic:claude-sonnet-4-5-20250929",
         "openai": "openai:gpt-4o",
     },

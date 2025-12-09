@@ -8,13 +8,14 @@ from pydantic_graph import BaseNode, End, Graph, GraphRunContext
 from rich.console import Console
 from rich.prompt import Prompt
 
-from wunderunner.activities import docker, dockerfile, project, services
+from wunderunner.activities import docker, dockerfile, project, services, validation
 from wunderunner.exceptions import (
     BuildError,
     DockerfileError,
     HealthcheckError,
     ServicesError,
     StartError,
+    ValidationError,
 )
 from wunderunner.settings import get_settings
 from wunderunner.workflows.state import ContainerizeState, Learning
@@ -65,7 +66,7 @@ class CollectSecrets(BaseNode[ContainerizeState]):
 class Dockerfile(BaseNode[ContainerizeState]):
     """Generate or refine Dockerfile."""
 
-    async def run(self, ctx: Ctx) -> Services | RetryOrHint:
+    async def run(self, ctx: Ctx) -> Validate | RetryOrHint:
         try:
             ctx.state.dockerfile_content = await dockerfile.generate(
                 ctx.state.analysis,
@@ -74,10 +75,49 @@ class Dockerfile(BaseNode[ContainerizeState]):
                 existing=ctx.state.dockerfile_content,
                 project_path=ctx.state.path,
             )
-            return Services()
+            return Validate()
         except DockerfileError as e:
             learning = Learning(
                 phase="dockerfile",
+                error_type=type(e).__name__,
+                error_message=str(e),
+            )
+            ctx.state.learnings.append(learning)
+            return RetryOrHint(learning=learning)
+
+
+@dataclass
+class Validate(BaseNode[ContainerizeState]):
+    """Validate Dockerfile using two-tier validation (programmatic + LLM grading)."""
+
+    async def run(self, ctx: Ctx) -> Services | RetryOrHint:
+        try:
+            result = await validation.validate(
+                ctx.state.dockerfile_content,
+                ctx.state.analysis,
+                ctx.state.learnings,
+            )
+
+            # Store validation result for debugging/logging
+            ctx.state.last_validation_grade = result.grade
+
+            if result.is_valid:
+                return Services()
+
+            # Validation failed - create learning from feedback
+            issues_text = "; ".join(result.issues) if result.issues else result.feedback
+            learning = Learning(
+                phase="validation",
+                error_type="ValidationFailed",
+                error_message=f"Grade: {result.grade}/100. {issues_text}",
+                context="\n".join(result.recommendations) if result.recommendations else None,
+            )
+            ctx.state.learnings.append(learning)
+            return RetryOrHint(learning=learning)
+
+        except ValidationError as e:
+            learning = Learning(
+                phase="validation",
                 error_type=type(e).__name__,
                 error_message=str(e),
             )
@@ -97,7 +137,15 @@ class Services(BaseNode[ContainerizeState]):
                 ctx.state.learnings,
                 ctx.state.hints,
                 existing=ctx.state.compose_content,
+                project_path=ctx.state.path,
             )
+
+            # Write compose file to disk for docker compose to use
+            settings = get_settings()
+            compose_path = ctx.state.path / settings.cache_dir / "docker-compose.yaml"
+            compose_path.parent.mkdir(parents=True, exist_ok=True)
+            compose_path.write_text(ctx.state.compose_content)
+
             return Build()
         except ServicesError as e:
             learning = Learning(
@@ -203,6 +251,7 @@ containerize_graph = Graph(
         Analyze,
         CollectSecrets,
         Dockerfile,
+        Validate,
         Services,
         Build,
         Start,
