@@ -1,6 +1,7 @@
 """Docker image activities using docker-py SDK."""
 
 import hashlib
+import logging
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -10,6 +11,8 @@ from docker.errors import ImageNotFound
 
 from wunderunner.exceptions import BuildError
 from wunderunner.settings import get_settings
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -80,18 +83,42 @@ async def build(path: Path, dockerfile_content: str) -> BuildResult:
         image = client.images.get(tag)
         return BuildResult(image_id=image.id, cache_hit=True)
 
-    # Build the image
+    # Build the image with streaming logs
     try:
-        image, _build_logs = client.images.build(
+        # Use low-level API to get streaming logs
+        build_output = client.api.build(
             path=str(path),
-            dockerfile=str(dockerfile_path),
+            dockerfile=str(dockerfile_path.relative_to(path)),
             tag=tag,
-            rm=True,  # Remove intermediate containers
-            forcerm=True,  # Always remove intermediate containers
+            rm=True,
+            forcerm=True,
+            decode=True,
         )
+
+        logs = []
+        for chunk in build_output:
+            if "stream" in chunk:
+                line = chunk["stream"].rstrip()
+                if line:
+                    logger.info("  %s", line)
+                    logs.append(chunk["stream"])
+            elif "error" in chunk:
+                logger.error("  %s", chunk["error"])
+                logs.append(chunk["error"])
+            elif "status" in chunk:
+                # Pull progress
+                status = chunk.get("status", "")
+                progress = chunk.get("progress", "")
+                if progress:
+                    logger.debug("  %s %s", status, progress)
+                elif status:
+                    logger.info("  %s", status)
+
+        # Get the built image
+        image = client.images.get(tag)
         return BuildResult(image_id=image.id, cache_hit=False)
+
     except DockerBuildError as e:
-        # Extract build log from exception
         logs = []
         for chunk in e.build_log:
             if "stream" in chunk:
