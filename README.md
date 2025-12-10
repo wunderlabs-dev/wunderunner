@@ -63,21 +63,24 @@ flowchart TD
 
     Dockerfile[📄 Generate Dockerfile] --> Validate[✅ Validate]
     Validate -->|pass| Services[🐳 Generate Compose]
-    Services --> Build[🔨 Build Image]
-    Build --> Start[🚀 Start Containers]
-    Start --> Healthcheck[💓 Healthcheck]
-    Healthcheck -->|healthy| Success((✨ Success))
-
     Validate -->|fail| RetryOrHint
-    Build -->|fail| FixProject[🔧 Fix Project]
-    Start -->|fail| FixProject
-    Healthcheck -->|fail| FixProject
+    Services -->|success| Build[🔨 Build Image]
+    Services -->|fail| RetryOrHint
+    Build -->|success| Start[🚀 Start Containers]
+    Build -->|fail| RetryOrHint
+    Start -->|success| Healthcheck[💓 Healthcheck]
+    Start -->|fail| RetryOrHint
+    Healthcheck -->|healthy| Success((✨ Success))
+    Healthcheck -->|fail| RetryOrHint
 
-    FixProject -->|fixed| Dockerfile
-    FixProject -->|can't fix| RetryOrHint
-
-    RetryOrHint{Retry?} -->|attempts left| Dockerfile
+    RetryOrHint{Retry?} -->|validation/generation error| Dockerfile
+    RetryOrHint -->|runtime error| ImproveDockerfile[🔧 Improve Dockerfile]
     RetryOrHint -->|exhausted| HumanHint[💬 Ask Human]
+
+    ImproveDockerfile -->|fixed| Validate
+    ImproveDockerfile -->|compose modified| Build
+    ImproveDockerfile -->|low confidence| HumanHint
+
     HumanHint --> Dockerfile
 ```
 
@@ -138,14 +141,14 @@ Cached artifacts:
 
 ### Runtime Healing
 
-Failures during build, start, or healthcheck trigger the **FixProject** agent. This agent can:
+Failures during build, start, or healthcheck trigger the **ImproveDockerfile** agent. This unified agent can:
 
-- Modify project files (add missing configs, fix entry points)
-- Update package dependencies
-- Add required system packages to Dockerfile
-- Fix environment variable issues
+- Modify the Dockerfile (add missing packages, fix commands)
+- Modify project files (remove problematic configs like `.babelrc`)
+- Update docker-compose.yaml (fix port mappings, remove bad volumes)
+- Add `.dockerignore` entries to exclude conflicting files
 
-If FixProject succeeds, it resets the retry counter, giving the workflow fresh attempts with the fixed configuration.
+The agent reads error messages carefully and applies targeted fixes. If it modifies docker-compose.yaml, it skips regeneration and goes directly to build.
 
 ---
 
