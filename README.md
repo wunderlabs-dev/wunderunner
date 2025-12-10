@@ -28,6 +28,8 @@
 
 **wunderunner (`wxr`)** is a CLI tool that uses AI agents to analyze your codebase and generate production-ready Docker configurations. Point it at any project and it figures out the rest: scanning your dependencies, generating optimized Dockerfiles, and building containers.
 
+
+
 **Self-healing by design.** When builds fail, wunderunner doesn't just report errors. It analyzes logs, identifies the root cause, fixes the configuration, and tries again. This iterative loop continues until your container runs successfully or the issue requires human intervention.
 
 Built with [Pydantic AI](https://ai.pydantic.dev/) for structured agent workflows. Inspired by [Repo2Run](https://github.com/bytedance/Repo2Run) and [Railpack](https://github.com/railwayapp/railpack).
@@ -39,9 +41,7 @@ Built with [Pydantic AI](https://ai.pydantic.dev/) for structured agent workflow
 ---
 
 
-
-https://github.com/user-attachments/assets/a234b4a0-bc66-4551-9222-1c777b18d7c5
-
+https://github.com/user-attachments/assets/e14a83c1-6cfe-449b-a43e-d6c0ac47904d
 
 
 ## Quick Start
