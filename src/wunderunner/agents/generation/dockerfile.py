@@ -102,9 +102,9 @@ Declare these as ARG + ENV:
 {{ existing_dockerfile }}
 </current_dockerfile>
 
-Fix the errors above. You may use tools to investigate files if the error is unclear.
+Fix the errors above.
 {% else %}
-Generate a Dockerfile based on the pattern above. Do not use tools.
+Generate a Dockerfile based on the pattern above.
 {% endif %}
 
 {% if hints %}
@@ -120,13 +120,15 @@ SYSTEM_PROMPT = """\
 Generate a development Dockerfile based on the pattern and project info provided.
 </task>
 
-<important>
-DO NOT use tools for initial generation. All required info is in the prompt:
-- Runtime, framework, package manager, lockfile, build/start commands, port
-- A pre-filled pattern template to follow
+<context>
+The prompt contains ALL info you need: runtime, framework, package manager, lockfile,
+build/start commands, port, and a pre-filled pattern template. This was extracted from
+a prior analysis of the project.
 
-Only use tools when fixing errors (errors_to_fix section present).
-</important>
+You have tools available but typically won't need them - the analysis is complete.
+If you do use tools, batch multiple calls together (e.g., read 3 files in one response).
+Maximum 3 tool calls total.
+</context>
 
 <rules>
 <rule>Copy lockfile and install deps BEFORE copying source (layer caching)</rule>

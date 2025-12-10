@@ -5,6 +5,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from pydantic_ai import UsageLimits
+
 from wunderunner.agents.generation import dockerfile as dockerfile_agent
 from wunderunner.agents.tools import AgentDeps
 from wunderunner.agents.validation import regression as regression_agent
@@ -16,6 +18,9 @@ from wunderunner.storage.context import add_entry, load_context, save_context
 from wunderunner.workflows.state import Learning
 
 logger = logging.getLogger(__name__)
+
+# Limit tool calls - the agent has all info it needs from analysis
+USAGE_LIMITS = UsageLimits(tool_calls_limit=5)
 
 
 @dataclass
@@ -87,6 +92,7 @@ async def generate(
             prompt,
             deps=deps,
             message_history=message_history,
+            usage_limits=USAGE_LIMITS,
         )
         dockerfile_result = result.output
         new_messages = result.new_messages()
