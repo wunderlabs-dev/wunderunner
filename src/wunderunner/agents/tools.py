@@ -128,7 +128,10 @@ def _iter_files(root: Path, max_files: int = 5000) -> list[Path]:
 async def read_file(ctx: RunContext[AgentDeps], path: str) -> str:
     """Read file contents. Returns truncated content if file exceeds max size."""
     logger.debug("tool:read_file(%s)", path)
-    full_path = _validate_path(ctx.deps, path)
+    try:
+        full_path = _validate_path(ctx.deps, path)
+    except ValueError as e:
+        return f"Error: {e}"
     if not full_path.exists():
         return f"Error: File not found: {path}"
     if not full_path.is_file():
@@ -154,7 +157,10 @@ def _list_dir_sync(full_path: Path) -> list[str]:
 async def list_dir(ctx: RunContext[AgentDeps], path: str = ".") -> str:
     """List directory contents. Directories are suffixed with /."""
     logger.debug("tool:list_dir(%s)", path)
-    full_path = _validate_path(ctx.deps, path)
+    try:
+        full_path = _validate_path(ctx.deps, path)
+    except ValueError as e:
+        return f"Error: {e}"
     if not full_path.exists():
         return f"Error: Directory not found: {path}"
     if not full_path.is_dir():
@@ -223,7 +229,10 @@ def _grep_sync(
 async def grep(ctx: RunContext[AgentDeps], pattern: str, path: str = ".") -> str:
     """Search file contents for regex pattern. Returns file:line:content format."""
     logger.debug("tool:grep(%s, %s)", pattern, path)
-    full_path = _validate_path(ctx.deps, path)
+    try:
+        full_path = _validate_path(ctx.deps, path)
+    except ValueError as e:
+        return f"Error: {e}"
 
     try:
         regex = re.compile(pattern, re.IGNORECASE)
@@ -248,7 +257,10 @@ async def grep(ctx: RunContext[AgentDeps], pattern: str, path: str = ".") -> str
 async def file_stats(ctx: RunContext[AgentDeps], path: str) -> str:
     """Get file metadata: size and modification time."""
     logger.debug("tool:file_stats(%s)", path)
-    full_path = _validate_path(ctx.deps, path)
+    try:
+        full_path = _validate_path(ctx.deps, path)
+    except ValueError as e:
+        return f"Error: {e}"
     if not full_path.exists():
         return f"Error: File not found: {path}"
 
@@ -272,7 +284,10 @@ def _write_file_sync(full_path: Path, content: str) -> str:
 async def write_file(ctx: RunContext[AgentDeps], path: str, content: str) -> str:
     """Write content to a file in the project directory."""
     logger.debug("tool:write_file(%s)", path)
-    full_path = _validate_path(ctx.deps, path)
+    try:
+        full_path = _validate_path(ctx.deps, path)
+    except ValueError as e:
+        return f"Error: {e}"
 
     # Don't overwrite existing sensitive files
     is_sensitive = any(p in path.lower() for p in SENSITIVE_PATTERNS)
@@ -297,7 +312,10 @@ async def edit_file(
     Use this for surgical edits instead of rewriting entire files.
     """
     logger.debug("tool:edit_file(%s)", path)
-    full_path = _validate_path(ctx.deps, path)
+    try:
+        full_path = _validate_path(ctx.deps, path)
+    except ValueError as e:
+        return f"Error: {e}"
 
     if not full_path.exists():
         return f"Error: File not found: {path}"

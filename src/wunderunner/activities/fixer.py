@@ -45,6 +45,9 @@ async def fix_project(
         compose=compose_content,
     )
 
+    logger.debug("Fixer system prompt:\n%s", fixer_agent.SYSTEM_PROMPT)
+    logger.debug("Fixer user prompt:\n%s", prompt)
+
     deps = AgentDeps(project_dir=project_path)
 
     try:
