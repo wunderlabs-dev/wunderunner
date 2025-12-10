@@ -4,7 +4,7 @@
 
 ### AI-Powered Docker Configuration Generator
 
-**Analyze your project, generate Dockerfiles & docker-compose.yaml, and learn from build errors—all with AI.**
+**Analyze your project, generate Dockerfiles & docker-compose.yaml, and learn from build errors with AI.**
 
 <p align="center">
   <a href="https://github.com/wunderlabs/wunderunner">
@@ -26,9 +26,9 @@
 <tr>
 <td>
 
-**wunderunner (`wxr`)** is a CLI tool that uses AI agents to analyze your codebase and generate production-ready Docker configurations. Point it at any project and it figures out the rest—scanning your dependencies, generating optimized Dockerfiles, and building containers.
+**wunderunner (`wxr`)** is a CLI tool that uses AI agents to analyze your codebase and generate production-ready Docker configurations. Point it at any project and it figures out the rest: scanning your dependencies, generating optimized Dockerfiles, and building containers.
 
-**Self-healing by design.** When builds fail, wunderunner doesn't just report errors—it analyzes logs, identifies the root cause, fixes the configuration, and tries again. This iterative loop continues until your container runs successfully or the issue requires human intervention.
+**Self-healing by design.** When builds fail, wunderunner doesn't just report errors. It analyzes logs, identifies the root cause, fixes the configuration, and tries again. This iterative loop continues until your container runs successfully or the issue requires human intervention.
 
 Built with [Pydantic AI](https://ai.pydantic.dev/) for structured agent workflows. Inspired by [Repo2Run](https://github.com/bytedance/Repo2Run) and [Railpack](https://github.com/railwayapp/railpack).
 
@@ -81,7 +81,7 @@ flowchart TD
     HumanHint --> Dockerfile
 ```
 
-**The loop continues until success.** Each failure feeds back as a learning—informing the next generation attempt with specific context about what went wrong and how to fix it.
+**The loop continues until success.** Each failure feeds back as a learning, informing the next generation attempt with specific context about what went wrong and how to fix it.
 
 ---
 
@@ -100,7 +100,7 @@ flowchart TD
 
 ### Human in the Loop
 
-When automatic retries are exhausted, wunderunner asks for help instead of giving up. You provide a hint—maybe the project needs a specific system dependency, or uses an unconventional setup. Your hint becomes part of the context for the next attempt.
+When automatic retries are exhausted, wunderunner asks for help instead of giving up. You provide a hint, maybe the project needs a specific system dependency, or uses an unconventional setup. Your hint becomes part of the context for the next attempt.
 
 ```
 ❌ Build failed after 3 attempts
@@ -145,7 +145,7 @@ Failures during build, start, or healthcheck trigger the **FixProject** agent. T
 - Add required system packages to Dockerfile
 - Fix environment variable issues
 
-If FixProject succeeds, it resets the retry counter—giving the workflow fresh attempts with the fixed configuration.
+If FixProject succeeds, it resets the retry counter, giving the workflow fresh attempts with the fixed configuration.
 
 ---
 
