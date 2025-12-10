@@ -3,6 +3,8 @@
 from enum import Enum
 from functools import lru_cache
 
+from pydantic_ai.models import Model
+from pydantic_ai.models.fallback import FallbackModel
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -64,56 +66,53 @@ class Context(Enum):
 AgentType = Analysis | Generation | Validation | Context
 
 
-# Model preferences per agent (best choice when both providers available)
-_PREFERRED_MODELS: dict[AgentType, dict[str, str]] = {
+# Model priority list per agent - tried in order until one succeeds
+_MODEL_PRIORITY: dict[AgentType, list[str]] = {
     # Analysis agents
-    Analysis.PROJECT_STRUCTURE: {
-        "anthropic": "anthropic:claude-sonnet-4-5-20250929",
-        "openai": "openai:gpt-4o",
-    },
-    Analysis.BUILD_STRATEGY: {
-        "anthropic": "anthropic:claude-sonnet-4-5-20250929",
-        "openai": "openai:gpt-4o",
-    },
-    Analysis.ENV_VARS: {
-        "anthropic": "anthropic:claude-sonnet-4-5-20250929",
-        "openai": "openai:gpt-4o",
-    },
-    Analysis.SECRETS: {
-        "anthropic": "anthropic:claude-sonnet-4-5-20250929",
-        "openai": "openai:gpt-4o",
-    },
-    Analysis.CODE_STYLE: {
-        "anthropic": "anthropic:claude-haiku-3-5-20241022",
-        "openai": "openai:gpt-4o-mini",
-    },
+    Analysis.PROJECT_STRUCTURE: [
+        "anthropic:claude-sonnet-4-5-20250929",
+        "openai:gpt-4o",
+    ],
+    Analysis.BUILD_STRATEGY: [
+        "anthropic:claude-sonnet-4-5-20250929",
+        "openai:gpt-4o",
+    ],
+    Analysis.ENV_VARS: [
+        "anthropic:claude-sonnet-4-5-20250929",
+        "openai:gpt-4o",
+    ],
+    Analysis.SECRETS: [
+        "anthropic:claude-sonnet-4-5-20250929",
+        "openai:gpt-4o",
+    ],
+    Analysis.CODE_STYLE: [
+        "anthropic:claude-haiku-3-5-20241022",
+        "openai:gpt-4o-mini",
+    ],
     # Generation agents
-    Generation.DOCKERFILE: {
-        "anthropic": "anthropic:claude-sonnet-4-5-20250929",
-        "openai": "openai:gpt-4o",
-    },
-    Generation.COMPOSE: {
-        "anthropic": "anthropic:claude-sonnet-4-5-20250929",
-        "openai": "openai:gpt-4o",
-    },
+    Generation.DOCKERFILE: [
+        "anthropic:claude-sonnet-4-5-20250929",
+        "openai:gpt-4o",
+    ],
+    Generation.COMPOSE: [
+        "anthropic:claude-sonnet-4-5-20250929",
+        "openai:gpt-4o",
+    ],
     # Validation agents
-    Validation.DOCKERFILE: {
-        "anthropic": "anthropic:claude-sonnet-4-5-20250929",
-        "openai": "openai:gpt-4o",
-    },
-    Validation.COMPOSE: {
-        "anthropic": "anthropic:claude-sonnet-4-5-20250929",
-        "openai": "openai:gpt-4o",
-    },
+    Validation.DOCKERFILE: [
+        "anthropic:claude-sonnet-4-5-20250929",
+        "openai:gpt-4o",
+    ],
+    Validation.COMPOSE: [
+        "anthropic:claude-sonnet-4-5-20250929",
+        "openai:gpt-4o",
+    ],
     # Context agents (use cheaper models for summarization)
-    Context.SUMMARIZER: {
-        "anthropic": "anthropic:claude-haiku-3-5-20241022",
-        "openai": "openai:gpt-4o-mini",
-    },
+    Context.SUMMARIZER: [
+        "anthropic:claude-haiku-3-5-20241022",
+        "openai:gpt-4o-mini",
+    ],
 }
-
-# Default provider preference when both are available
-_DEFAULT_PROVIDER = "anthropic"
 
 
 class NoAPIKeyError(Exception):
@@ -125,42 +124,50 @@ class NoAPIKeyError(Exception):
         )
 
 
-def get_available_provider() -> str:
-    """Get the available provider based on configured API keys.
-
-    Returns the preferred provider if both are available.
-    Raises NoAPIKeyError if neither is configured.
-    """
+def _get_available_providers() -> set[str]:
+    """Get set of available providers based on configured API keys."""
     settings = get_settings()
-
-    has_anthropic = bool(settings.anthropic_api_key)
-    has_openai = bool(settings.openai_api_key)
-
-    if has_anthropic and has_openai:
-        return _DEFAULT_PROVIDER
-    if has_anthropic:
-        return "anthropic"
-    if has_openai:
-        return "openai"
-
-    raise NoAPIKeyError()
+    providers = set()
+    if settings.anthropic_api_key:
+        providers.add("anthropic")
+    if settings.openai_api_key:
+        providers.add("openai")
+    return providers
 
 
-def get_model(agent: AgentType) -> str:
-    """Get the best available model for a given agent.
+def get_model(agent: AgentType) -> Model | str:
+    """Get model(s) for an agent based on priority list and available API keys.
 
     Args:
         agent: The agent type enum value (e.g., Analysis.CODE_STYLE)
 
     Returns:
-        Model string in pydantic-ai format (e.g., "anthropic:claude-sonnet-4-5-20250929")
+        FallbackModel if multiple models available, otherwise single model string.
 
     Raises:
         NoAPIKeyError: If no API keys are configured
         ValueError: If agent type is unknown
     """
-    if agent not in _PREFERRED_MODELS:
+    if agent not in _MODEL_PRIORITY:
         raise ValueError(f"Unknown agent type: {agent}")
 
-    provider = get_available_provider()
-    return _PREFERRED_MODELS[agent][provider]
+    available_providers = _get_available_providers()
+    if not available_providers:
+        raise NoAPIKeyError()
+
+    # Filter to models we have API keys for
+    priority_list = _MODEL_PRIORITY[agent]
+    available_models = [
+        model for model in priority_list
+        if model.split(":")[0] in available_providers
+    ]
+
+    if not available_models:
+        raise NoAPIKeyError()
+
+    # Single model - return string
+    if len(available_models) == 1:
+        return available_models[0]
+
+    # Multiple models - return FallbackModel
+    return FallbackModel(available_models[0], *available_models[1:])
