@@ -41,7 +41,11 @@ Built with [Pydantic AI](https://ai.pydantic.dev/) for structured agent workflow
 ---
 
 
-https://github.com/user-attachments/assets/5597a191-64cf-4446-a060-38ace7acd6e6
+
+
+https://github.com/user-attachments/assets/c0f82ca0-5f8b-4370-8b3f-fd4bcd8a1939
+
+
 
 
 ## Quick Start
