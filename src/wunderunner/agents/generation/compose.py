@@ -70,13 +70,14 @@ Generate a new docker-compose.yaml for this project.
 
 SYSTEM_PROMPT = """\
 <task>
-Generate or refine a docker-compose.yaml file for running the project. You will receive:
+Generate or refine a docker-compose.yaml file for a DEVELOPMENT environment. You will receive:
 - Project analysis (runtime, framework, services needed)
 - The Dockerfile being used
 - Previous learnings from failed starts (if any)
 - User hints (if any)
 - Existing docker-compose.yaml to refine (if any)
 
+This is for local development, not production. Include volume mounts for live reload.
 Your output must be valid YAML for docker-compose v3.8+ format.
 </task>
 
@@ -100,8 +101,6 @@ services:
       dockerfile: .wunderunner/Dockerfile
     ports:
       - "3000:3000"
-    environment:
-      - NODE_ENV=production
     volumes:
       - .:/app
       - /app/node_modules
@@ -168,7 +167,6 @@ environment:
 For non-secrets with defaults:
 ```yaml
 environment:
-  - NODE_ENV=production
   - PORT=3000
 ```
 </environment_variables>

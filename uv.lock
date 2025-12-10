@@ -2831,7 +2831,7 @@ wheels = [
 ]
 
 [[package]]
-name = "wunderunner"
+name = "wxr"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
