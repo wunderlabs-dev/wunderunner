@@ -272,6 +272,46 @@ async def write_file(ctx: RunContext[AgentDeps], path: str, content: str) -> str
         return f"Error writing file: {e}"
 
 
+async def edit_file(
+    ctx: RunContext[AgentDeps],
+    path: str,
+    old_string: str,
+    new_string: str,
+) -> str:
+    """Replace old_string with new_string in a file.
+
+    The old_string must match exactly (including whitespace/indentation).
+    Use this for surgical edits instead of rewriting entire files.
+    """
+    logger.debug("tool:edit_file(%s)", path)
+    full_path = _validate_path(ctx.deps, path)
+
+    if not full_path.exists():
+        return f"Error: File not found: {path}"
+
+    # Don't edit sensitive files
+    is_sensitive = any(p in path.lower() for p in SENSITIVE_PATTERNS)
+    if is_sensitive:
+        return f"Error: Refusing to edit sensitive file: {path}"
+
+    content = await asyncio.to_thread(full_path.read_text, errors="replace")
+
+    if old_string not in content:
+        return f"Error: old_string not found in {path}"
+
+    count = content.count(old_string)
+    if count > 1:
+        return f"Error: old_string appears {count} times in {path}. Make it more specific."
+
+    new_content = content.replace(old_string, new_string, 1)
+
+    try:
+        await asyncio.to_thread(full_path.write_text, new_content)
+        return f"Successfully edited {path}"
+    except OSError as e:
+        return f"Error writing file: {e}"
+
+
 def register_tools(agent: Agent[AgentDeps, object], include_write: bool = False) -> None:
     """Register filesystem tools on an agent."""
     agent.tool(read_file)
@@ -281,3 +321,4 @@ def register_tools(agent: Agent[AgentDeps, object], include_write: bool = False)
     agent.tool(file_stats)
     if include_write:
         agent.tool(write_file)
+        agent.tool(edit_file)

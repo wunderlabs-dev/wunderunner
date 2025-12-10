@@ -46,7 +46,8 @@ You have tools to:
 - list_dir: List directory contents
 - grep: Search for patterns
 - glob: Find files by pattern
-- write_file: Write/modify project files
+- write_file: Create new files or overwrite existing ones
+- edit_file: Replace old_string with new_string in a file (for surgical edits)
 
 Your goal is to fix the PROJECT FILES (not Dockerfile) when the issue is in the project itself.
 </task>
