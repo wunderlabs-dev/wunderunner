@@ -7,85 +7,76 @@ from wunderunner.agents.tools import AgentDeps, register_tools
 from wunderunner.models.generation import DockerfileResult
 from wunderunner.settings import Generation, get_model
 
-# Runtime-specific templates - only the relevant one is included in the prompt
+# Runtime-specific templates for development containers
 RUNTIME_TEMPLATES = {
     "node": """\
-# Node.js Dockerfile pattern:
+# Node.js development container
 FROM node:{{ version }}-alpine
 WORKDIR /app
 {% if lockfile == "package-lock.json" %}
 COPY package.json package-lock.json ./
-RUN npm ci --only=production
+RUN npm ci
 {% elif lockfile == "yarn.lock" %}
 COPY package.json yarn.lock ./
-RUN yarn install --frozen-lockfile --production
+RUN yarn install --frozen-lockfile
 {% elif lockfile == "pnpm-lock.yaml" %}
 COPY package.json pnpm-lock.yaml ./
-RUN corepack enable && pnpm install --frozen-lockfile --prod
+RUN corepack enable && pnpm install --frozen-lockfile
 {% elif lockfile == "bun.lockb" %}
 COPY package.json bun.lockb ./
-RUN bun install --frozen-lockfile --production
+RUN bun install --frozen-lockfile
 {% else %}
 COPY package.json ./
-RUN npm install --only=production
+RUN npm install
 {% endif %}
 COPY . .
 {% if build_command %}
 RUN {{ build_command }}
 {% endif %}
-ENV NODE_ENV=production
 EXPOSE {{ port }}
 CMD {{ start_command }}
 """,
     "python": """\
-# Python Dockerfile pattern:
+# Python development container
 FROM python:{{ version }}-slim
 WORKDIR /app
 {% if package_manager == "uv" %}
 COPY pyproject.toml uv.lock ./
-RUN pip install uv && uv sync --frozen --no-dev
+RUN pip install uv && uv sync --frozen
 {% elif package_manager == "poetry" %}
 COPY pyproject.toml poetry.lock ./
-RUN pip install poetry && poetry install --no-dev
+RUN pip install poetry && poetry install
 {% elif package_manager == "pip" %}
 COPY requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
 {% else %}
 COPY pyproject.toml ./
-RUN pip install .
+RUN pip install -e .
 {% endif %}
 COPY . .
 EXPOSE {{ port }}
 CMD {{ start_command }}
 """,
     "go": """\
-# Go Dockerfile pattern (multi-stage):
-FROM golang:{{ version }}-alpine AS builder
+# Go development container
+FROM golang:{{ version }}-alpine
 WORKDIR /app
 COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
-RUN CGO_ENABLED=0 go build -o main .
-
-FROM alpine:latest
-WORKDIR /app
-COPY --from=builder /app/main .
+RUN go build -o main .
 EXPOSE {{ port }}
 CMD ["./main"]
 """,
     "rust": """\
-# Rust Dockerfile pattern (multi-stage):
-FROM rust:{{ version }} AS builder
+# Rust development container
+FROM rust:{{ version }}
 WORKDIR /app
 COPY Cargo.toml Cargo.lock ./
 COPY src ./src
-RUN cargo build --release
-
-FROM debian:bookworm-slim
-WORKDIR /app
-COPY --from=builder /app/target/release/{{ binary_name }} .
+RUN cargo build
 EXPOSE {{ port }}
-CMD ["./{{ binary_name }}"]
+CMD ["./target/debug/{{ binary_name }}"]
 """,
 }
 
@@ -139,24 +130,30 @@ Generate a Dockerfile based on the pattern above.
 """)
 
 SYSTEM_PROMPT = """\
-Generate a Dockerfile. Follow the pattern provided but adapt to the specific project.
+<task>
+Generate a development Dockerfile. Follow the pattern provided but adapt to the project.
+</task>
 
-Rules:
-1. Copy lockfile and install deps BEFORE copying source (layer caching)
-2. Use --frozen-lockfile or equivalent (reproducible builds)
-3. Set NODE_ENV=production or equivalent for production builds
-4. If secrets are listed, add ARG + ENV for each before any RUN that needs them
-5. Keep it simple - 10-20 lines is ideal
+<rules>
+<rule>Copy lockfile and install deps BEFORE copying source (layer caching)</rule>
+<rule>Use --frozen-lockfile or equivalent (reproducible builds)</rule>
+<rule>Include dev dependencies - this is a development container</rule>
+<rule>If secrets are listed, add ARG + ENV for each before any RUN that needs them</rule>
+<rule>Keep it simple - 10-20 lines is ideal</rule>
+</rules>
 
+<error_recovery>
 When fixing errors:
 - Read the error message carefully
 - Use tools (read_file, grep) to investigate actual files
 - Fix only what's broken, keep what works
+</error_recovery>
 
-Output:
+<output>
 - dockerfile: Valid Dockerfile starting with FROM
 - confidence: 0-10 (10 = certain, 5 = reasonable guess, 0 = very uncertain)
 - reasoning: What you did and why (1-2 sentences)
+</output>
 """
 
 agent = Agent(
