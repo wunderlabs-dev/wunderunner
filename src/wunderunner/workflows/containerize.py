@@ -338,6 +338,7 @@ class FixProject(BaseNode[ContainerizeState]):
 
         fix_result = await fixer.fix_project(
             learning=self.learning,
+            analysis=ctx.state.analysis,
             dockerfile_content=ctx.state.dockerfile_content,
             compose_content=ctx.state.compose_content,
             project_path=ctx.state.path,

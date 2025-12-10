@@ -314,11 +314,13 @@ async def edit_file(
 
 def register_tools(agent: Agent[AgentDeps, object], include_write: bool = False) -> None:
     """Register filesystem tools on an agent."""
+
     agent.tool(read_file)
     agent.tool(list_dir)
     agent.tool(glob)
     agent.tool(grep)
     agent.tool(file_stats)
+
     if include_write:
         agent.tool(write_file)
         agent.tool(edit_file)

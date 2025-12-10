@@ -12,6 +12,10 @@ from wunderunner.settings import Generation, get_model
 logger = logging.getLogger(__name__)
 
 USER_PROMPT = Template("""\
+<project_analysis>
+{{ analysis | tojson(indent=2) }}
+</project_analysis>
+
 <error>
 Phase: {{ phase }}
 Error: {{ error_type }}
@@ -31,9 +35,8 @@ Context: {{ context }}
 </docker_compose>
 {% endif %}
 
-Investigate the error and determine if it can be fixed by modifying project files.
-Use your tools to explore the project and understand the issue.
-If you can fix it, make the changes. If not, explain why.
+Based on the project analysis and error above, determine if the issue can be fixed
+by modifying project files. If you can fix it, make the changes. If not, explain why.
 """)
 
 SYSTEM_PROMPT = """\
