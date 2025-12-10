@@ -174,7 +174,7 @@ def init(
         sys.exit(130)
 
     console.print("\n[green bold]✓ Containerization complete![/green bold]")
-    console.print(f"  [dim]Files written to {project_path / '.wunderunner'}[/dim]\n")
+    console.print("  [dim]Dockerfile and docker-compose.yaml written to project root[/dim]\n")
 
 
 if __name__ == "__main__":

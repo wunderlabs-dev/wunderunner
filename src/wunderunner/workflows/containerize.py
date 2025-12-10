@@ -180,9 +180,7 @@ class Services(BaseNode[ContainerizeState]):
                 project_path=ctx.state.path,
             )
 
-            settings = get_settings()
-            compose_path = ctx.state.path / settings.cache_dir / "docker-compose.yaml"
-            compose_path.parent.mkdir(parents=True, exist_ok=True)
+            compose_path = ctx.state.path / "docker-compose.yaml"
             async with aiofiles.open(compose_path, "w") as f:
                 await f.write(ctx.state.compose_content)
 

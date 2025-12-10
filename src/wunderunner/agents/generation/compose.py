@@ -96,9 +96,7 @@ version: '3.8'
 
 services:
   app:
-    build:
-      context: .
-      dockerfile: .wunderunner/Dockerfile
+    build: .
     ports:
       - "3000:3000"
     volumes:

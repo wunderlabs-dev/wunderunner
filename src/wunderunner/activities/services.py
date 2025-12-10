@@ -15,7 +15,6 @@ from wunderunner.agents.generation import compose as compose_agent
 from wunderunner.agents.tools import AgentDeps
 from wunderunner.exceptions import HealthcheckError, ServicesError, StartError
 from wunderunner.models.analysis import Analysis
-from wunderunner.settings import get_settings
 from wunderunner.workflows.state import Learning
 
 
@@ -81,8 +80,7 @@ async def start(path: Path) -> list[str]:
     Raises:
         StartError: If services fail to start.
     """
-    settings = get_settings()
-    compose_path = path / settings.cache_dir / "docker-compose.yaml"
+    compose_path = path / "docker-compose.yaml"
 
     if not compose_path.exists():
         raise StartError("docker-compose.yaml not found. Run generate first.")
@@ -121,8 +119,7 @@ async def start(path: Path) -> list[str]:
 
 async def _get_compose_container_ids(path: Path) -> list[str]:
     """Get container IDs for the running compose services."""
-    settings = get_settings()
-    compose_path = path / settings.cache_dir / "docker-compose.yaml"
+    compose_path = path / "docker-compose.yaml"
 
     cmd = [
         "docker",
@@ -155,8 +152,7 @@ async def stop(path: Path) -> None:
     Args:
         path: Path to the project directory.
     """
-    settings = get_settings()
-    compose_path = path / settings.cache_dir / "docker-compose.yaml"
+    compose_path = path / "docker-compose.yaml"
 
     if not compose_path.exists():
         return

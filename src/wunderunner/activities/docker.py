@@ -9,7 +9,6 @@ import docker
 from docker.errors import ImageNotFound
 
 from wunderunner.exceptions import BuildError
-from wunderunner.settings import get_settings
 
 logger = logging.getLogger(__name__)
 
@@ -63,11 +62,7 @@ async def build(path: Path, dockerfile_content: str) -> BuildResult:
     Raises:
         BuildError: If build fails.
     """
-    settings = get_settings()
-    dockerfile_path = path / settings.cache_dir / "Dockerfile"
-
-    # Ensure cache directory exists
-    dockerfile_path.parent.mkdir(parents=True, exist_ok=True)
+    dockerfile_path = path / "Dockerfile"
 
     # Write Dockerfile
     dockerfile_path.write_text(dockerfile_content)
