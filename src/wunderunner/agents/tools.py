@@ -245,10 +245,42 @@ async def file_stats(ctx: RunContext[AgentDeps], path: str) -> str:
     return f"size: {size} bytes\nmodified: {mtime}"
 
 
+# Sensitive file patterns that should not be overwritten
+SENSITIVE_PATTERNS = frozenset({".env", "credentials", "secret", ".key", ".pem"})
+
+
+def _write_file_sync(full_path: Path, content: str) -> str:
+    """Synchronous write for thread pool."""
+    full_path.parent.mkdir(parents=True, exist_ok=True)
+    full_path.write_text(content)
+    return f"Successfully wrote {len(content)} bytes to {full_path.name}"
+
+
+async def write_file(ctx: RunContext[AgentDeps], path: str, content: str) -> str:
+    """Write content to a file in the project directory."""
+    logger.debug("tool:write_file(%s)", path)
+    full_path = _validate_path(ctx.deps, path)
+
+    # Don't overwrite existing sensitive files
+    is_sensitive = any(p in path.lower() for p in SENSITIVE_PATTERNS)
+    if is_sensitive and full_path.exists():
+        return f"Error: Refusing to overwrite sensitive file: {path}"
+
+    try:
+        return await asyncio.to_thread(_write_file_sync, full_path, content)
+    except OSError as e:
+        return f"Error writing file: {e}"
+
+
 def register_tools(agent: Agent[AgentDeps, object]) -> None:
-    """Register all filesystem tools on an agent."""
+    """Register read-only filesystem tools on an agent."""
     agent.tool(read_file)
     agent.tool(list_dir)
     agent.tool(glob)
     agent.tool(grep)
     agent.tool(file_stats)
+
+
+def register_write_tools(agent: Agent[AgentDeps, object]) -> None:
+    """Register write tools on an agent. Use with caution."""
+    agent.tool(write_file)
