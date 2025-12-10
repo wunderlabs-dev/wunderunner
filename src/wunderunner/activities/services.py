@@ -198,7 +198,10 @@ async def healthcheck(container_ids: list[str], timeout: int = 60) -> None:
     while True:
         elapsed = asyncio.get_event_loop().time() - start_time
         if elapsed > timeout:
-            raise HealthcheckError(f"Health check timed out after {timeout}s")
+            all_logs = _get_all_container_logs(client, container_ids)
+            raise HealthcheckError(
+                f"Health check timed out after {timeout}s (waiting for containers)\n\n{all_logs}"
+            )
 
         all_running = True
         for container_id in container_ids:
@@ -226,7 +229,10 @@ async def healthcheck(container_ids: list[str], timeout: int = 60) -> None:
         while True:
             elapsed = asyncio.get_event_loop().time() - start_time
             if elapsed > timeout:
-                raise HealthcheckError(f"HTTP health check timed out after {timeout}s")
+                all_logs = _get_all_container_logs(client, container_ids)
+                raise HealthcheckError(
+                    f"HTTP health check timed out after {timeout}s\n\n{all_logs}"
+                )
 
             all_healthy = True
             for url in http_targets:
@@ -303,3 +309,19 @@ def _get_container_logs(client: docker.DockerClient, container_id: str, tail: in
         return str(logs)
     except NotFound:
         return "Container not found"
+
+
+def _get_all_container_logs(client: docker.DockerClient, container_ids: list[str]) -> str:
+    """Get logs from all containers, formatted with container names."""
+    parts = []
+    for container_id in container_ids:
+        try:
+            container = client.containers.get(container_id)
+            name = container.name
+        except NotFound:
+            name = container_id[:12]
+
+        logs = _get_container_logs(client, container_id)
+        parts.append(f"=== {name} ===\n{logs}")
+
+    return "\n\n".join(parts)

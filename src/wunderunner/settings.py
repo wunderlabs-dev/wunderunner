@@ -18,7 +18,7 @@ class Settings(BaseSettings):
     anthropic_api_key: str | None = None
     openai_api_key: str | None = None
     logfire_token: str | None = None
-    max_attempts: int = 3
+    max_attempts: int = 5
 
     # Cache settings
     cache_dir: str = ".wunderunner"

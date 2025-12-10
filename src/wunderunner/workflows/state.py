@@ -82,7 +82,7 @@ class ContainerizeState:
     hints: list[str] = field(default_factory=list)
 
     # Retry tracking (reset after human hint)
-    attempts_since_hint: int = 0
+    retry_count: int = 0
 
     # Intermediate artifacts (for persistence and refinement)
     dockerfile_content: str | None = None
@@ -97,3 +97,6 @@ class ContainerizeState:
 
     # Conversation history for stateful Dockerfile generation
     dockerfile_messages: list[Any] = field(default_factory=list)
+
+    # Healthcheck timeout tracking (increases on timeout failures)
+    healthcheck_timeout: int = 60

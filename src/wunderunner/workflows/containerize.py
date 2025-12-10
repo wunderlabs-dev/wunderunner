@@ -256,14 +256,18 @@ class Healthcheck(BaseNode[ContainerizeState]):
 
     async def run(self, ctx: Ctx) -> End[Success] | RetryOrHint:
         progress = ctx.state.on_progress
+        timeout = ctx.state.healthcheck_timeout
 
         try:
-            progress(Severity.INFO, "Checking container health...")
-            await services.healthcheck(ctx.state.container_ids)
+            progress(Severity.INFO, f"Checking container health (timeout: {timeout}s)...")
+            await services.healthcheck(ctx.state.container_ids, timeout=timeout)
             progress(Severity.SUCCESS, "All containers healthy")
             return End(Success())
         except HealthcheckError as e:
             progress(Severity.ERROR, "Health check failed")
+            # Increase timeout for next attempt if this was a timeout
+            if "timed out" in str(e):
+                ctx.state.healthcheck_timeout = min(timeout + 60, 300)  # Cap at 5 min
             learning = Learning(
                 phase=Phase.HEALTHCHECK,
                 error_type=type(e).__name__,
@@ -282,18 +286,20 @@ class RetryOrHint(BaseNode[ContainerizeState]):
     async def run(self, ctx: Ctx) -> FixProject | Dockerfile | HumanHint:
         progress = ctx.state.on_progress
         settings = get_settings()
-        ctx.state.attempts_since_hint += 1
+        ctx.state.retry_count += 1
+
+        # Check if we've exceeded max attempts
+        if ctx.state.retry_count >= settings.max_attempts:
+            return HumanHint()
 
         # For runtime errors (build/start/healthcheck), try fixing project first
         runtime_phases = {Phase.BUILD, Phase.START, Phase.HEALTHCHECK}
         if self.learning.phase in runtime_phases:
             return FixProject(learning=self.learning)
 
-        if ctx.state.attempts_since_hint < settings.max_attempts:
-            remaining = settings.max_attempts - ctx.state.attempts_since_hint
-            progress(Severity.INFO, f"Retrying... ({remaining} attempts remaining)")
-            return Dockerfile()
-        return HumanHint()
+        remaining = settings.max_attempts - ctx.state.retry_count
+        progress(Severity.INFO, f"Retrying... ({remaining} attempts remaining)")
+        return Dockerfile()
 
 
 @dataclass
@@ -314,7 +320,7 @@ class HumanHint(BaseNode[ContainerizeState]):
             raise KeyboardInterrupt()
 
         ctx.state.hints.append(hint)
-        ctx.state.attempts_since_hint = 0
+        ctx.state.retry_count = 0
         return Dockerfile()
 
 
@@ -324,7 +330,7 @@ class FixProject(BaseNode[ContainerizeState]):
 
     learning: Learning
 
-    async def run(self, ctx: Ctx) -> Dockerfile | HumanHint:
+    async def run(self, ctx: Ctx) -> Dockerfile:
         progress = ctx.state.on_progress
         settings = get_settings()
 
@@ -343,24 +349,20 @@ class FixProject(BaseNode[ContainerizeState]):
             for change in fix_result.changes:
                 progress(Severity.INFO, f"  Modified: {change}")
             # Reset retry counter since we made progress
-            ctx.state.attempts_since_hint = 0
-            return Dockerfile()
+            ctx.state.retry_count = 0
+        else:
+            # Fixer couldn't help - record as learning (it often contains root cause analysis)
+            progress(Severity.INFO, f"Not a project file issue: {fix_result.explanation}")
+            fixer_learning = Learning(
+                phase=Phase.FIXER,
+                error_type="FixerFailed",
+                error_message=fix_result.explanation,
+                context=f"Original error: {self.learning.error_message}",
+            )
+            ctx.state.learnings.append(fixer_learning)
 
-        # Fixer couldn't help - record as learning and continue retry logic
-        progress(Severity.WARNING, f"Could not fix project: {fix_result.explanation}")
-        fixer_learning = Learning(
-            phase=Phase.FIXER,
-            error_type="FixerFailed",
-            error_message=fix_result.explanation,
-            context=f"Original error: {self.learning.error_message}",
-        )
-        ctx.state.learnings.append(fixer_learning)
-
-        # Check if we've exceeded attempts
-        if ctx.state.attempts_since_hint >= settings.max_attempts:
-            return HumanHint()
-
-        remaining = settings.max_attempts - ctx.state.attempts_since_hint
+        # Always go back to Dockerfile - RetryOrHint will handle max attempts on next failure
+        remaining = settings.max_attempts - ctx.state.retry_count
         progress(Severity.INFO, f"Retrying Dockerfile... ({remaining} attempts remaining)")
         return Dockerfile()
 
