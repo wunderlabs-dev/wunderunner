@@ -247,16 +247,14 @@ def _get_http_targets(client: docker.DockerClient, container_ids: list[str]) -> 
     """Get HTTP URLs for containers with exposed ports.
 
     Returns URLs for localhost with the host port mapping.
-    Only returns ports that look like HTTP (common web ports).
+    Probes all exposed TCP ports - the healthcheck handles non-HTTP gracefully.
     """
-    http_ports = {80, 443, 3000, 5000, 8000, 8080, 8888, 9000}
     targets = []
 
     for container_id in container_ids:
         ports = _get_container_ports(client, container_id)
-        for host_port, container_port in ports:
-            if container_port in http_ports:
-                targets.append(f"http://localhost:{host_port}")
+        for host_port, _container_port in ports:
+            targets.append(f"http://localhost:{host_port}")
 
     return targets
 

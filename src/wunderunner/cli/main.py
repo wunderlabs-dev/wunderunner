@@ -7,9 +7,10 @@ from typing import Annotated
 
 import typer
 from rich.console import Console
+from rich.prompt import Prompt
 
 from wunderunner.workflows.containerize import Analyze, containerize_graph
-from wunderunner.workflows.state import ContainerizeState
+from wunderunner.workflows.state import ContainerizeState, Learning, Severity
 
 app = typer.Typer(
     name="wunderunner",
@@ -23,6 +24,66 @@ def _validate_project_path(path: Path) -> Path:
     if not path.is_dir():
         raise typer.BadParameter(f"Path is not a directory: {path}")
     return path.resolve()
+
+
+def _make_progress_callback(console: Console):
+    """Create a Rich-based progress callback."""
+    severity_styles = {
+        Severity.INFO: ("blue", ""),
+        Severity.SUCCESS: ("green", "✓"),
+        Severity.WARNING: ("yellow", "!"),
+        Severity.ERROR: ("red", "✗"),
+    }
+
+    def callback(severity: Severity, message: str) -> None:
+        color, icon = severity_styles[severity]
+        if icon:
+            console.print(f"  [{color}]{icon}[/{color}] {message}")
+        else:
+            console.print(f"  [{color}]•[/{color}] {message}")
+
+    return callback
+
+
+def _make_secret_prompt_callback(console: Console):
+    """Create a Rich-based secret prompt callback."""
+
+    def callback(name: str, service: str | None) -> str:
+        service_hint = f" ({service})" if service else ""
+        return Prompt.ask(
+            f"  [bold]{name}[/bold]{service_hint}",
+            password=True,
+            console=console,
+        )
+
+    return callback
+
+
+def _make_hint_prompt_callback(console: Console):
+    """Create a Rich-based hint prompt callback."""
+
+    def callback(learnings: list[Learning]) -> str | None:
+        console.print("\n[yellow]Recent errors:[/yellow]")
+        for learning in reversed(learnings):
+            console.print(f"  [bold]{learning.phase}[/bold]: {learning.error_type}")
+            msg = learning.error_message
+            if len(msg) > 200:
+                msg = msg[:200] + "..."
+            console.print(f"    {msg}")
+            if learning.context:
+                console.print(f"    [dim]Hint: {learning.context[:100]}...[/dim]")
+
+        console.print()
+        hint = Prompt.ask(
+            "[cyan]Any hints to help fix this? (or 'q' to quit)[/cyan]",
+            console=console,
+        )
+
+        if hint.lower() == "q":
+            return None
+        return hint
+
+    return callback
 
 
 @app.command()
@@ -50,7 +111,13 @@ def init(
         console.print("[dim]  (ignoring cache)[/dim]")
     console.print()
 
-    state = ContainerizeState(path=project_path, rebuild=rebuild, console=console)
+    state = ContainerizeState(
+        path=project_path,
+        rebuild=rebuild,
+        on_progress=_make_progress_callback(console),
+        on_secret_prompt=_make_secret_prompt_callback(console),
+        on_hint_prompt=_make_hint_prompt_callback(console),
+    )
 
     try:
         asyncio.run(containerize_graph.run(Analyze(), state=state))

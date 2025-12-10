@@ -1,13 +1,10 @@
 """State for the containerize workflow."""
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from enum import StrEnum
 from pathlib import Path
 from typing import Any
-
-from rich.console import Console
-
-from wunderunner.models.analysis import Analysis
 
 
 class Phase(StrEnum):
@@ -19,6 +16,35 @@ class Phase(StrEnum):
     BUILD = "build"
     START = "start"
     HEALTHCHECK = "healthcheck"
+
+
+class Severity(StrEnum):
+    """Severity levels for progress messages."""
+
+    INFO = "info"
+    SUCCESS = "success"
+    WARNING = "warning"
+    ERROR = "error"
+
+
+# Callback signatures
+ProgressCallback = Callable[[Severity, str], None]
+SecretPromptCallback = Callable[[str, str | None], str]  # (name, service) -> value
+HintPromptCallback = Callable[[list["Learning"]], str | None]  # (learnings) -> hint or None to quit
+
+
+def _noop_progress(severity: Severity, message: str) -> None:
+    """Default no-op progress callback."""
+
+
+def _noop_secret_prompt(name: str, service: str | None) -> str:
+    """Default secret prompt - raises to indicate no handler."""
+    raise NotImplementedError("Secret prompt callback not provided")
+
+
+def _noop_hint_prompt(learnings: list["Learning"]) -> str | None:
+    """Default hint prompt - returns None to quit."""
+    return None
 
 
 @dataclass
@@ -37,10 +63,15 @@ class ContainerizeState:
 
     path: Path
     rebuild: bool = False
-    console: Console = field(default_factory=Console)
+
+    # Callbacks for UI interaction (CLI provides Rich-based implementations)
+    on_progress: ProgressCallback = _noop_progress
+    on_secret_prompt: SecretPromptCallback = _noop_secret_prompt
+    on_hint_prompt: HintPromptCallback = _noop_hint_prompt
 
     # Analysis result (set by Analyze node)
-    analysis: Analysis | None = None
+    # Import here to avoid circular import
+    analysis: Any = None
 
     # Secret values collected from user (name -> value)
     secret_values: dict[str, str] = field(default_factory=dict)

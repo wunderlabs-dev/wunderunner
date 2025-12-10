@@ -6,7 +6,6 @@ from dataclasses import dataclass
 
 import aiofiles
 from pydantic_graph import BaseNode, End, Graph, GraphRunContext
-from rich.prompt import Prompt
 
 from wunderunner.activities import docker, dockerfile, project, services, validation
 from wunderunner.exceptions import (
@@ -18,7 +17,7 @@ from wunderunner.exceptions import (
     ValidationError,
 )
 from wunderunner.settings import get_settings
-from wunderunner.workflows.state import ContainerizeState, Learning, Phase
+from wunderunner.workflows.state import ContainerizeState, Learning, Phase, Severity
 
 Ctx = GraphRunContext[ContainerizeState, None]
 
@@ -33,14 +32,14 @@ class Analyze(BaseNode[ContainerizeState]):
     """Run analysis agents and check for secrets."""
 
     async def run(self, ctx: Ctx) -> CollectSecrets | Dockerfile:
-        console = ctx.state.console
-        with console.status("[bold blue]Analyzing project..."):
-            analysis = await project.analyze(ctx.state.path, ctx.state.rebuild)
+        progress = ctx.state.on_progress
+        progress(Severity.INFO, "Analyzing project...")
+        analysis = await project.analyze(ctx.state.path, ctx.state.rebuild)
         ctx.state.analysis = analysis
 
         runtime = analysis.project_structure.runtime
         framework = analysis.project_structure.framework or "no framework"
-        console.print(f"  [green]✓[/green] Detected {runtime} ({framework})")
+        progress(Severity.SUCCESS, f"Detected {runtime} ({framework})")
 
         secrets = [v for v in analysis.env_vars if v.secret]
         if secrets:
@@ -50,21 +49,19 @@ class Analyze(BaseNode[ContainerizeState]):
 
 @dataclass
 class CollectSecrets(BaseNode[ContainerizeState]):
-    """Prompt user for secret values via CLI."""
+    """Prompt user for secret values via callback."""
 
     async def run(self, ctx: Ctx) -> Dockerfile:
-        console = ctx.state.console
+        progress = ctx.state.on_progress
+        secret_prompt = ctx.state.on_secret_prompt
         secrets = [v for v in ctx.state.analysis.env_vars if v.secret]
 
-        console.print("\n[yellow]Secrets required:[/yellow]")
+        progress(Severity.INFO, f"Collecting {len(secrets)} secret(s)...")
         for var in secrets:
-            service_hint = f" ({var.service})" if var.service else ""
-            value = Prompt.ask(
-                f"  [bold]{var.name}[/bold]{service_hint}",
-                password=True,
-            )
+            value = secret_prompt(var.name, var.service)
             ctx.state.secret_values[var.name] = value
 
+        progress(Severity.SUCCESS, "Secrets collected")
         return Dockerfile()
 
 
@@ -73,43 +70,44 @@ class Dockerfile(BaseNode[ContainerizeState]):
     """Generate or refine Dockerfile."""
 
     async def run(self, ctx: Ctx) -> Validate | RetryOrHint:
-        console = ctx.state.console
+        progress = ctx.state.on_progress
         is_refine = ctx.state.dockerfile_content is not None
         action = "Refining" if is_refine else "Generating"
 
         try:
-            with console.status(f"[bold blue]{action} Dockerfile..."):
-                gen_result = await dockerfile.generate(
-                    ctx.state.analysis,
-                    ctx.state.learnings,
-                    ctx.state.hints,
-                    existing=ctx.state.dockerfile_content,
-                    project_path=ctx.state.path,
-                    message_history=ctx.state.dockerfile_messages,
-                )
+            progress(Severity.INFO, f"{action} Dockerfile...")
+            gen_result = await dockerfile.generate(
+                ctx.state.analysis,
+                ctx.state.learnings,
+                ctx.state.hints,
+                existing=ctx.state.dockerfile_content,
+                project_path=ctx.state.path,
+                message_history=ctx.state.dockerfile_messages,
+            )
 
             # Store results and conversation history for next retry
             ctx.state.dockerfile_content = gen_result.result.dockerfile
             ctx.state.last_confidence = gen_result.result.confidence
             ctx.state.dockerfile_messages = gen_result.messages
 
-            # Show confidence and any regression warnings
+            # Report confidence level
             conf = gen_result.result.confidence
-            if conf >= 7:
-                color = "green"
-            elif conf >= 4:
-                color = "yellow"
-            else:
-                color = "red"
+            has_regression = "REGRESSION" in gen_result.result.reasoning
 
-            status = f"{action.lower()[:-3]}ed (confidence: [{color}]{conf}/10[/{color}])"
-            if "REGRESSION" in gen_result.result.reasoning:
-                status += " [yellow]⚠ regression detected[/yellow]"
-            console.print(f"  [green]✓[/green] Dockerfile {status}")
+            status_msg = f"Dockerfile {action.lower()[:-3]}ed (confidence: {conf}/10)"
+            if has_regression:
+                status_msg += " - regression detected"
+
+            if conf >= 7 and not has_regression:
+                progress(Severity.SUCCESS, status_msg)
+            elif conf >= 4:
+                progress(Severity.WARNING, status_msg)
+            else:
+                progress(Severity.WARNING, status_msg)
 
             return Validate()
         except DockerfileError as e:
-            console.print("  [red]✗[/red] Dockerfile generation failed")
+            progress(Severity.ERROR, "Dockerfile generation failed")
             learning = Learning(
                 phase=Phase.DOCKERFILE,
                 error_type=type(e).__name__,
@@ -124,23 +122,23 @@ class Validate(BaseNode[ContainerizeState]):
     """Validate Dockerfile using two-tier validation (programmatic + LLM grading)."""
 
     async def run(self, ctx: Ctx) -> Services | RetryOrHint:
-        console = ctx.state.console
+        progress = ctx.state.on_progress
 
         try:
-            with console.status("[bold blue]Validating Dockerfile..."):
-                result = await validation.validate(
-                    ctx.state.dockerfile_content,
-                    ctx.state.analysis,
-                    ctx.state.learnings,
-                )
+            progress(Severity.INFO, "Validating Dockerfile...")
+            result = await validation.validate(
+                ctx.state.dockerfile_content,
+                ctx.state.analysis,
+                ctx.state.learnings,
+            )
 
             ctx.state.last_validation_grade = result.grade
 
             if result.is_valid:
-                console.print(f"  [green]✓[/green] Validation passed (grade: {result.grade}/100)")
+                progress(Severity.SUCCESS, f"Validation passed (grade: {result.grade}/100)")
                 return Services()
 
-            console.print(f"  [yellow]![/yellow] Validation failed (grade: {result.grade}/100)")
+            progress(Severity.WARNING, f"Validation failed (grade: {result.grade}/100)")
             issues_text = "; ".join(result.issues) if result.issues else result.feedback
             learning = Learning(
                 phase=Phase.VALIDATION,
@@ -152,7 +150,7 @@ class Validate(BaseNode[ContainerizeState]):
             return RetryOrHint(learning=learning)
 
         except ValidationError as e:
-            console.print(f"  [red]✗[/red] Validation error: {e}")
+            progress(Severity.ERROR, f"Validation error: {e}")
             learning = Learning(
                 phase=Phase.VALIDATION,
                 error_type=type(e).__name__,
@@ -167,20 +165,20 @@ class Services(BaseNode[ContainerizeState]):
     """Generate or refine docker-compose.yaml."""
 
     async def run(self, ctx: Ctx) -> Build | RetryOrHint:
-        console = ctx.state.console
+        progress = ctx.state.on_progress
         is_refine = ctx.state.compose_content is not None
         action = "Refining" if is_refine else "Generating"
 
         try:
-            with console.status(f"[bold blue]{action} docker-compose.yaml..."):
-                ctx.state.compose_content = await services.generate(
-                    ctx.state.analysis,
-                    ctx.state.dockerfile_content,
-                    ctx.state.learnings,
-                    ctx.state.hints,
-                    existing=ctx.state.compose_content,
-                    project_path=ctx.state.path,
-                )
+            progress(Severity.INFO, f"{action} docker-compose.yaml...")
+            ctx.state.compose_content = await services.generate(
+                ctx.state.analysis,
+                ctx.state.dockerfile_content,
+                ctx.state.learnings,
+                ctx.state.hints,
+                existing=ctx.state.compose_content,
+                project_path=ctx.state.path,
+            )
 
             settings = get_settings()
             compose_path = ctx.state.path / settings.cache_dir / "docker-compose.yaml"
@@ -188,10 +186,10 @@ class Services(BaseNode[ContainerizeState]):
             async with aiofiles.open(compose_path, "w") as f:
                 await f.write(ctx.state.compose_content)
 
-            console.print(f"  [green]✓[/green] docker-compose.yaml {action.lower()[:-3]}ed")
+            progress(Severity.SUCCESS, f"docker-compose.yaml {action.lower()[:-3]}ed")
             return Build()
         except ServicesError as e:
-            console.print("  [red]✗[/red] Compose generation failed")
+            progress(Severity.ERROR, "Compose generation failed")
             learning = Learning(
                 phase=Phase.SERVICES,
                 error_type=type(e).__name__,
@@ -206,21 +204,21 @@ class Build(BaseNode[ContainerizeState]):
     """Build Docker image."""
 
     async def run(self, ctx: Ctx) -> Start | RetryOrHint:
-        console = ctx.state.console
+        progress = ctx.state.on_progress
 
         try:
-            with console.status("[bold blue]Building Docker image..."):
-                build_result = await docker.build(
-                    ctx.state.path,
-                    ctx.state.dockerfile_content,
-                )
+            progress(Severity.INFO, "Building Docker image...")
+            build_result = await docker.build(
+                ctx.state.path,
+                ctx.state.dockerfile_content,
+            )
             if build_result.cache_hit:
-                console.print("  [green]✓[/green] Docker image found in cache")
+                progress(Severity.SUCCESS, "Docker image found in cache")
             else:
-                console.print("  [green]✓[/green] Docker image built")
+                progress(Severity.SUCCESS, "Docker image built")
             return Start()
         except BuildError as e:
-            console.print("  [red]✗[/red] Docker build failed")
+            progress(Severity.ERROR, "Docker build failed")
             error_msg = str(e)
             # Extract last 15 lines of build output for context
             lines = error_msg.split("\n")
@@ -240,15 +238,15 @@ class Start(BaseNode[ContainerizeState]):
     """Start containers with docker compose."""
 
     async def run(self, ctx: Ctx) -> Healthcheck | RetryOrHint:
-        console = ctx.state.console
+        progress = ctx.state.on_progress
 
         try:
-            with console.status("[bold blue]Starting containers..."):
-                ctx.state.container_ids = await services.start(ctx.state.path)
-            console.print(f"  [green]✓[/green] Started {len(ctx.state.container_ids)} container(s)")
+            progress(Severity.INFO, "Starting containers...")
+            ctx.state.container_ids = await services.start(ctx.state.path)
+            progress(Severity.SUCCESS, f"Started {len(ctx.state.container_ids)} container(s)")
             return Healthcheck()
         except StartError as e:
-            console.print("  [red]✗[/red] Failed to start containers")
+            progress(Severity.ERROR, "Failed to start containers")
             learning = Learning(
                 phase=Phase.START,
                 error_type=type(e).__name__,
@@ -263,15 +261,15 @@ class Healthcheck(BaseNode[ContainerizeState]):
     """Check container health."""
 
     async def run(self, ctx: Ctx) -> End[Success] | RetryOrHint:
-        console = ctx.state.console
+        progress = ctx.state.on_progress
 
         try:
-            with console.status("[bold blue]Checking container health..."):
-                await services.healthcheck(ctx.state.container_ids)
-            console.print("  [green]✓[/green] All containers healthy")
+            progress(Severity.INFO, "Checking container health...")
+            await services.healthcheck(ctx.state.container_ids)
+            progress(Severity.SUCCESS, "All containers healthy")
             return End(Success())
         except HealthcheckError as e:
-            console.print("  [red]✗[/red] Health check failed")
+            progress(Severity.ERROR, "Health check failed")
             learning = Learning(
                 phase=Phase.HEALTHCHECK,
                 error_type=type(e).__name__,
@@ -288,43 +286,32 @@ class RetryOrHint(BaseNode[ContainerizeState]):
     learning: Learning
 
     async def run(self, ctx: Ctx) -> Dockerfile | HumanHint:
-        console = ctx.state.console
+        progress = ctx.state.on_progress
         settings = get_settings()
         ctx.state.attempts_since_hint += 1
 
         if ctx.state.attempts_since_hint < settings.max_attempts:
             remaining = settings.max_attempts - ctx.state.attempts_since_hint
-            console.print(f"  [dim]Retrying... ({remaining} attempts remaining)[/dim]")
+            progress(Severity.INFO, f"Retrying... ({remaining} attempts remaining)")
             return Dockerfile()
         return HumanHint()
 
 
 @dataclass
 class HumanHint(BaseNode[ContainerizeState]):
-    """Show errors and prompt user for hint."""
+    """Show errors and prompt user for hint via callback."""
 
     async def run(self, ctx: Ctx) -> Dockerfile:
-        console = ctx.state.console
+        progress = ctx.state.on_progress
+        hint_prompt = ctx.state.on_hint_prompt
 
-        console.print("\n[red bold]Workflow needs help after multiple attempts[/red bold]\n")
+        progress(Severity.ERROR, "Workflow needs help after multiple attempts")
 
-        # Show last few errors (most recent first)
+        # Get hint via callback (passes recent learnings for context)
         recent_learnings = ctx.state.learnings[-3:]
-        console.print("[yellow]Recent errors:[/yellow]")
-        for learning in reversed(recent_learnings):
-            console.print(f"  [bold]{learning.phase}[/bold]: {learning.error_type}")
-            # Truncate long error messages
-            msg = learning.error_message
-            if len(msg) > 200:
-                msg = msg[:200] + "..."
-            console.print(f"    {msg}")
-            if learning.context:
-                console.print(f"    [dim]Hint: {learning.context[:100]}...[/dim]")
+        hint = hint_prompt(recent_learnings)
 
-        console.print()
-        hint = Prompt.ask("[cyan]Any hints to help fix this? (or 'q' to quit)[/cyan]")
-
-        if hint.lower() == "q":
+        if hint is None:
             raise KeyboardInterrupt()
 
         ctx.state.hints.append(hint)
