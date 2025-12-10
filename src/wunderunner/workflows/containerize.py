@@ -219,15 +219,11 @@ class Build(BaseNode[ContainerizeState]):
             return Start()
         except BuildError as e:
             progress(Severity.ERROR, "Docker build failed")
-            error_msg = str(e)
-            # Extract last 15 lines of build output for context
-            lines = error_msg.split("\n")
-            if len(lines) > 15:
-                error_msg = "\n".join(lines[-15:])
+            # Pass full build logs - the agent needs context to understand the error
             learning = Learning(
                 phase=Phase.BUILD,
                 error_type=type(e).__name__,
-                error_message=error_msg,
+                error_message=str(e),
             )
             ctx.state.learnings.append(learning)
             return RetryOrHint(learning=learning)
