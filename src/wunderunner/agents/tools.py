@@ -348,6 +348,25 @@ async def edit_file(
         return f"Error writing file: {e}"
 
 
+async def check_files_exist(ctx: RunContext[AgentDeps], paths: list[str]) -> str:
+    """Check which files exist from a list of paths.
+
+    Returns a mapping of each path to whether it exists.
+    CRITICAL: Use this to verify which lockfile actually exists before trusting
+    package.json declarations (packageManager field is often wrong).
+    """
+    logger.debug("tool:check_files_exist(%s)", paths)
+    results = []
+    for path in paths:
+        try:
+            full_path = _validate_path(ctx.deps, path)
+            exists = await asyncio.to_thread(full_path.exists)
+            results.append(f"{path}: {'exists' if exists else 'not found'}")
+        except ValueError as e:
+            results.append(f"{path}: Error - {e}")
+    return "\n".join(results)
+
+
 def register_tools(agent: Agent[AgentDeps, object], include_write: bool = False) -> None:
     """Register filesystem tools on an agent."""
 
@@ -356,6 +375,7 @@ def register_tools(agent: Agent[AgentDeps, object], include_write: bool = False)
     agent.tool(glob)
     agent.tool(grep)
     agent.tool(file_stats)
+    agent.tool(check_files_exist)
 
     if include_write:
         agent.tool(write_file)
