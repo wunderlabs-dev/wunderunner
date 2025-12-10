@@ -26,6 +26,7 @@ SKIP_DIRS = frozenset({
     ".git",
     ".svn",
     ".hg",
+    ".wunderunner",  # Our internal work directory
     "node_modules",
     ".venv",
     "venv",
@@ -80,6 +81,12 @@ def _validate_path(deps: AgentDeps, relative_path: str) -> Path:
     full_path = (deps.project_dir / relative_path).resolve()
     if not full_path.is_relative_to(deps.project_dir.resolve()):
         raise ValueError(f"Path escapes project directory: {relative_path}")
+
+    # Block access to internal work directory
+    parts = Path(relative_path).parts
+    if parts and parts[0] == ".wunderunner":
+        raise ValueError("Cannot access .wunderunner directory")
+
     return full_path
 
 
