@@ -18,7 +18,7 @@ class AgentDeps:
     """Dependencies injected into agent tools."""
 
     project_dir: Path
-    max_file_size: int = 50_000
+    max_file_size: int = 15_000  # ~15KB, roughly 3-4K tokens
 
 
 # Directories to skip during recursive file operations
@@ -179,7 +179,7 @@ async def glob(ctx: RunContext[AgentDeps], pattern: str) -> str:
 
 
 def _grep_sync(
-    pattern: re.Pattern, files: list[Path], project_dir: Path, max_results: int = 100
+    pattern: re.Pattern, files: list[Path], project_dir: Path, max_results: int = 50
 ) -> list[str]:
     """Synchronous grep implementation for thread pool."""
     results = []
@@ -196,7 +196,11 @@ def _grep_sync(
         relative = file_path.relative_to(project_dir)
         for line_num, line in enumerate(content.splitlines(), 1):
             if pattern.search(line):
-                results.append(f"{relative}:{line_num}:{line.strip()}")
+                # Truncate long lines
+                line_text = line.strip()
+                if len(line_text) > 200:
+                    line_text = line_text[:200] + "..."
+                results.append(f"{relative}:{line_num}:{line_text}")
                 if len(results) >= max_results:
                     break
 
