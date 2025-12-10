@@ -1,10 +1,16 @@
 """Project context persistence."""
 
+import logging
 from pathlib import Path
+
+import aiofiles
+from pydantic import ValidationError
 
 from wunderunner.agents.context import summarize
 from wunderunner.models.context import ContextEntry, ProjectContext
 from wunderunner.settings import get_settings
+
+logger = logging.getLogger(__name__)
 
 CONTEXT_FILE = "context.json"
 SUMMARIZATION_THRESHOLD = 10
@@ -16,7 +22,7 @@ def _get_context_path(project_path: Path) -> Path:
     return project_path / settings.cache_dir / CONTEXT_FILE
 
 
-def load_context(project_path: Path) -> ProjectContext:
+async def load_context(project_path: Path) -> ProjectContext:
     """Load project context from disk. Returns empty context if not found."""
     context_path = _get_context_path(project_path)
 
@@ -24,16 +30,20 @@ def load_context(project_path: Path) -> ProjectContext:
         return ProjectContext()
 
     try:
-        return ProjectContext.model_validate_json(context_path.read_text())
-    except Exception:
+        async with aiofiles.open(context_path) as f:
+            content = await f.read()
+        return ProjectContext.model_validate_json(content)
+    except (ValidationError, OSError, ValueError) as e:
+        logger.warning("Failed to load context from %s: %s", context_path, e)
         return ProjectContext()
 
 
-def save_context(project_path: Path, context: ProjectContext) -> None:
+async def save_context(project_path: Path, context: ProjectContext) -> None:
     """Save project context to disk."""
     context_path = _get_context_path(project_path)
     context_path.parent.mkdir(parents=True, exist_ok=True)
-    context_path.write_text(context.model_dump_json(indent=2))
+    async with aiofiles.open(context_path, "w") as f:
+        await f.write(context.model_dump_json(indent=2))
 
 
 async def add_entry(project_path: Path, entry: ContextEntry) -> ProjectContext:
@@ -44,12 +54,12 @@ async def add_entry(project_path: Path, entry: ContextEntry) -> ProjectContext:
     Returns:
         Updated context.
     """
-    context = load_context(project_path)
+    context = await load_context(project_path)
     context.add_entry(entry)
 
     if context.needs_summarization(SUMMARIZATION_THRESHOLD):
         summary = await summarize(context.entries, context.summary)
         context.apply_summary(summary)
 
-    save_context(project_path, context)
+    await save_context(project_path, context)
     return context

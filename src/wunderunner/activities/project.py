@@ -1,7 +1,10 @@
 """Project analysis activity."""
 
 import asyncio
+import logging
 from pathlib import Path
+
+from pydantic import ValidationError
 
 from wunderunner.agents.analysis import (
     build_strategy,
@@ -14,6 +17,8 @@ from wunderunner.agents.tools import AgentDeps
 from wunderunner.exceptions import AnalyzeError
 from wunderunner.models.analysis import Analysis, EnvVar
 from wunderunner.settings import get_settings
+
+logger = logging.getLogger(__name__)
 
 
 def _merge_env_vars(env_vars: list[EnvVar], secrets: list[EnvVar]) -> list[EnvVar]:
@@ -52,8 +57,8 @@ async def analyze(path: Path, rebuild: bool = False) -> Analysis:
     if not rebuild and cache_path.exists():
         try:
             return Analysis.model_validate_json(cache_path.read_text())
-        except Exception:
-            pass  # Cache invalid, re-analyze
+        except (ValidationError, OSError, ValueError) as e:
+            logger.warning("Failed to load analysis cache from %s: %s", cache_path, e)
 
     deps = AgentDeps(project_dir=path)
 

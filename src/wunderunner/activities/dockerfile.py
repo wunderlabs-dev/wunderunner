@@ -1,17 +1,21 @@
 """Dockerfile generation activity."""
 
+import logging
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 from wunderunner.agents.generation import dockerfile as dockerfile_agent
 from wunderunner.agents.tools import AgentDeps
 from wunderunner.agents.validation import regression as regression_agent
 from wunderunner.exceptions import DockerfileError
 from wunderunner.models.analysis import Analysis
-from wunderunner.models.context import ContextEntry
+from wunderunner.models.context import ContextEntry, EntryType
 from wunderunner.models.generation import DockerfileResult
 from wunderunner.storage.context import add_entry, load_context, save_context
 from wunderunner.workflows.state import Learning
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -19,7 +23,7 @@ class GenerateResult:
     """Result of Dockerfile generation including conversation history."""
 
     result: DockerfileResult
-    messages: list
+    messages: list[Any]
     """Message history for continuing conversation in next retry."""
 
 
@@ -29,7 +33,7 @@ async def generate(
     hints: list[str],
     existing: str | None = None,
     project_path: Path | None = None,
-    message_history: list | None = None,
+    message_history: list[Any] | None = None,
 ) -> GenerateResult:
     """Generate or refine Dockerfile based on analysis and learnings.
 
@@ -48,7 +52,7 @@ async def generate(
         DockerfileError: If generation/refinement fails.
     """
     # Load historical context for regression prevention
-    context = load_context(project_path) if project_path else None
+    context = await load_context(project_path) if project_path else None
     historical_fixes = context.get_dockerfile_fixes() if context else []
     context_summary = context.summary if context else None
 
@@ -83,7 +87,7 @@ async def generate(
         # Record this generation to context
         if project_path:
             entry = ContextEntry(
-                entry_type="dockerfile",
+                entry_type=EntryType.DOCKERFILE,
                 fix=f"Generated (confidence {dockerfile_result.confidence}/10)",
                 explanation=dockerfile_result.reasoning,
             )
@@ -112,9 +116,9 @@ async def _check_regressions(
 
         if check.has_regression:
             # Record violation to context
-            context = load_context(project_path)
+            context = await load_context(project_path)
             context.violation_count += 1
-            save_context(project_path, context)
+            await save_context(project_path, context)
 
             # Return adjusted result
             return DockerfileResult(
@@ -124,6 +128,6 @@ async def _check_regressions(
             )
 
         return result
-    except Exception:
-        # If regression check fails, return original result
+    except (RuntimeError, ValueError, OSError) as e:
+        logger.warning("Regression check failed, returning original result: %s", e)
         return result

@@ -40,8 +40,7 @@ async def summarize(entries: list[ContextEntry], existing_summary: str | None) -
         A 2-3 sentence summary of learnings.
     """
     entries_text = "\n".join(
-        f"- [{e.entry_type}] {e.error or 'OK'}: {e.fix or 'N/A'} - {e.explanation}"
-        for e in entries
+        f"- [{e.entry_type}] {e.error or 'OK'}: {e.fix or 'N/A'} - {e.explanation}" for e in entries
     )
 
     prompt = f"<entries>\n{entries_text}\n</entries>"

@@ -1,18 +1,31 @@
 """State for the containerize workflow."""
 
 from dataclasses import dataclass, field
+from enum import StrEnum
 from pathlib import Path
+from typing import Any
 
 from rich.console import Console
 
 from wunderunner.models.analysis import Analysis
 
 
+class Phase(StrEnum):
+    """Workflow phases where errors can occur."""
+
+    DOCKERFILE = "dockerfile"
+    VALIDATION = "validation"
+    SERVICES = "services"
+    BUILD = "build"
+    START = "start"
+    HEALTHCHECK = "healthcheck"
+
+
 @dataclass
 class Learning:
     """Captured learning from a failed phase."""
 
-    phase: str
+    phase: Phase
     error_type: str
     error_message: str
     context: str | None = None
@@ -51,4 +64,4 @@ class ContainerizeState:
     last_confidence: int | None = None
 
     # Conversation history for stateful Dockerfile generation
-    dockerfile_messages: list = field(default_factory=list)
+    dockerfile_messages: list[Any] = field(default_factory=list)

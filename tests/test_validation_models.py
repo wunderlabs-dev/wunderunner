@@ -1,6 +1,5 @@
 """Tests for validation models."""
 
-
 from wunderunner.models.validation import GradeBreakdown, ValidationResult
 
 

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+import aiofiles
 from pydantic_graph import BaseNode, End, Graph, GraphRunContext
 from rich.prompt import Prompt
 
@@ -17,7 +18,7 @@ from wunderunner.exceptions import (
     ValidationError,
 )
 from wunderunner.settings import get_settings
-from wunderunner.workflows.state import ContainerizeState, Learning
+from wunderunner.workflows.state import ContainerizeState, Learning, Phase
 
 Ctx = GraphRunContext[ContainerizeState, None]
 
@@ -110,7 +111,7 @@ class Dockerfile(BaseNode[ContainerizeState]):
         except DockerfileError as e:
             console.print("  [red]✗[/red] Dockerfile generation failed")
             learning = Learning(
-                phase="dockerfile",
+                phase=Phase.DOCKERFILE,
                 error_type=type(e).__name__,
                 error_message=str(e),
             )
@@ -142,7 +143,7 @@ class Validate(BaseNode[ContainerizeState]):
             console.print(f"  [yellow]![/yellow] Validation failed (grade: {result.grade}/100)")
             issues_text = "; ".join(result.issues) if result.issues else result.feedback
             learning = Learning(
-                phase="validation",
+                phase=Phase.VALIDATION,
                 error_type="ValidationFailed",
                 error_message=f"Grade: {result.grade}/100. {issues_text}",
                 context="\n".join(result.recommendations) if result.recommendations else None,
@@ -153,7 +154,7 @@ class Validate(BaseNode[ContainerizeState]):
         except ValidationError as e:
             console.print(f"  [red]✗[/red] Validation error: {e}")
             learning = Learning(
-                phase="validation",
+                phase=Phase.VALIDATION,
                 error_type=type(e).__name__,
                 error_message=str(e),
             )
@@ -184,14 +185,15 @@ class Services(BaseNode[ContainerizeState]):
             settings = get_settings()
             compose_path = ctx.state.path / settings.cache_dir / "docker-compose.yaml"
             compose_path.parent.mkdir(parents=True, exist_ok=True)
-            compose_path.write_text(ctx.state.compose_content)
+            async with aiofiles.open(compose_path, "w") as f:
+                await f.write(ctx.state.compose_content)
 
             console.print(f"  [green]✓[/green] docker-compose.yaml {action.lower()[:-3]}ed")
             return Build()
         except ServicesError as e:
             console.print("  [red]✗[/red] Compose generation failed")
             learning = Learning(
-                phase="services",
+                phase=Phase.SERVICES,
                 error_type=type(e).__name__,
                 error_message=str(e),
             )
@@ -208,11 +210,11 @@ class Build(BaseNode[ContainerizeState]):
 
         try:
             with console.status("[bold blue]Building Docker image..."):
-                _, cache_hit = await docker.build(
+                build_result = await docker.build(
                     ctx.state.path,
                     ctx.state.dockerfile_content,
                 )
-            if cache_hit:
+            if build_result.cache_hit:
                 console.print("  [green]✓[/green] Docker image found in cache")
             else:
                 console.print("  [green]✓[/green] Docker image built")
@@ -225,7 +227,7 @@ class Build(BaseNode[ContainerizeState]):
             if len(lines) > 15:
                 error_msg = "\n".join(lines[-15:])
             learning = Learning(
-                phase="build",
+                phase=Phase.BUILD,
                 error_type=type(e).__name__,
                 error_message=error_msg,
             )
@@ -248,7 +250,7 @@ class Start(BaseNode[ContainerizeState]):
         except StartError as e:
             console.print("  [red]✗[/red] Failed to start containers")
             learning = Learning(
-                phase="start",
+                phase=Phase.START,
                 error_type=type(e).__name__,
                 error_message=str(e),
             )
@@ -271,7 +273,7 @@ class Healthcheck(BaseNode[ContainerizeState]):
         except HealthcheckError as e:
             console.print("  [red]✗[/red] Health check failed")
             learning = Learning(
-                phase="healthcheck",
+                phase=Phase.HEALTHCHECK,
                 error_type=type(e).__name__,
                 error_message=str(e),
             )
