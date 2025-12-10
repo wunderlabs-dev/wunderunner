@@ -1,11 +1,28 @@
-"""Docker image activities."""
+"""Docker image activities using docker-py SDK."""
 
-import asyncio
 import hashlib
+from dataclasses import dataclass
 from pathlib import Path
+
+import docker
+from docker.errors import BuildError as DockerBuildError
+from docker.errors import ImageNotFound
 
 from wunderunner.exceptions import BuildError
 from wunderunner.settings import get_settings
+
+
+@dataclass
+class BuildResult:
+    """Result of a Docker build operation."""
+
+    image_id: str
+    cache_hit: bool
+
+
+def _get_client() -> docker.DockerClient:
+    """Get Docker client from environment."""
+    return docker.from_env()
 
 
 def _compute_cache_tag(path: Path, dockerfile_content: str) -> str:
@@ -19,19 +36,16 @@ def _compute_cache_tag(path: Path, dockerfile_content: str) -> str:
     return f"wunderunner-{path_hash}-{content_hash}"
 
 
-async def _image_exists(tag: str) -> bool:
+def _image_exists(client: docker.DockerClient, tag: str) -> bool:
     """Check if a Docker image with this tag exists locally."""
-    cmd = ["docker", "images", "-q", tag]
-    process = await asyncio.create_subprocess_exec(
-        *cmd,
-        stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.PIPE,
-    )
-    stdout, _ = await process.communicate()
-    return bool(stdout.decode().strip())
+    try:
+        client.images.get(tag)
+        return True
+    except ImageNotFound:
+        return False
 
 
-async def build(path: Path, dockerfile_content: str) -> tuple[str, bool]:
+async def build(path: Path, dockerfile_content: str) -> BuildResult:
     """Build Docker image from dockerfile content, using cache if available.
 
     Writes the Dockerfile to the project directory and runs docker build.
@@ -42,7 +56,7 @@ async def build(path: Path, dockerfile_content: str) -> tuple[str, bool]:
         dockerfile_content: The Dockerfile content to build.
 
     Returns:
-        Tuple of (image_id, cache_hit). cache_hit is True if build was skipped.
+        BuildResult with image_id and cache_hit flag.
 
     Raises:
         BuildError: If build fails.
@@ -59,54 +73,32 @@ async def build(path: Path, dockerfile_content: str) -> tuple[str, bool]:
     # Generate stable tag for caching
     tag = _compute_cache_tag(path, dockerfile_content)
 
+    client = _get_client()
+
     # Check if image already exists (cache hit)
-    if await _image_exists(tag):
-        image_id = await _get_image_id(tag)
-        return image_id, True
+    if _image_exists(client, tag):
+        image = client.images.get(tag)
+        return BuildResult(image_id=image.id, cache_hit=True)
 
     # Build the image
-    cmd = [
-        "docker",
-        "build",
-        "-t",
-        tag,
-        "-f",
-        str(dockerfile_path),
-        str(path),
-    ]
-
-    process = await asyncio.create_subprocess_exec(
-        *cmd,
-        stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.STDOUT,
-    )
-
-    stdout, _ = await process.communicate()
-    output = stdout.decode("utf-8", errors="replace")
-
-    if process.returncode != 0:
-        raise BuildError(f"Docker build failed:\n{output}")
-
-    # Get the image ID
-    image_id = await _get_image_id(tag)
-
-    return image_id, False
-
-
-async def _get_image_id(tag: str) -> str:
-    """Get the image ID for a given tag."""
-    cmd = ["docker", "images", "-q", tag]
-
-    process = await asyncio.create_subprocess_exec(
-        *cmd,
-        stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.PIPE,
-    )
-
-    stdout, _ = await process.communicate()
-    image_id = stdout.decode().strip()
-
-    if not image_id:
-        raise BuildError(f"Could not find image ID for tag: {tag}")
-
-    return image_id
+    try:
+        image, _build_logs = client.images.build(
+            path=str(path),
+            dockerfile=str(dockerfile_path),
+            tag=tag,
+            rm=True,  # Remove intermediate containers
+            forcerm=True,  # Always remove intermediate containers
+        )
+        return BuildResult(image_id=image.id, cache_hit=False)
+    except DockerBuildError as e:
+        # Extract build log from exception
+        logs = []
+        for chunk in e.build_log:
+            if "stream" in chunk:
+                logs.append(chunk["stream"])
+            elif "error" in chunk:
+                logs.append(chunk["error"])
+        output = "".join(logs)
+        raise BuildError(f"Docker build failed:\n{output}") from e
+    except Exception as e:
+        raise BuildError(f"Docker build failed: {e}") from e
