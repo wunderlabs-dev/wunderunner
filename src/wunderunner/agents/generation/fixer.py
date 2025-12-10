@@ -35,8 +35,16 @@ Context: {{ context }}
 </docker_compose>
 {% endif %}
 
-Based on the project analysis and error above, determine if the issue can be fixed
-by modifying project files. If you can fix it, make the changes. If not, explain why.
+FOCUS ON THE ACTUAL ERROR MESSAGE. Read it carefully before doing anything.
+
+Common patterns:
+- "Failed to resolve X" or "Cannot find module X" = missing dependency, add to package.json
+- "Module not found: X" = missing dependency or wrong import path
+- "command not found: X" = missing script in package.json
+- "ENOENT: no such file or directory" = missing file that needs to be created
+
+Based on the error above, determine if the issue can be fixed by modifying project files.
+If you can fix it, make the changes. If not, explain why.
 """)
 
 SYSTEM_PROMPT = """\
