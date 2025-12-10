@@ -31,6 +31,18 @@ def _merge_env_vars(env_vars: list[EnvVar], secrets: list[EnvVar]) -> list[EnvVa
     return list(by_name.values())
 
 
+async def _run_agent(name: str, agent, prompt: str, deps: AgentDeps):
+    """Run an agent with logging."""
+    logger.info("  [%s] starting...", name)
+    try:
+        result = await agent.run(prompt, deps=deps)
+        logger.info("  [%s] completed", name)
+        return result
+    except Exception as e:
+        logger.error("  [%s] failed: %s", name, e)
+        raise
+
+
 async def analyze(path: Path, rebuild: bool = False) -> Analysis:
     """Analyze project structure and dependencies.
 
@@ -62,15 +74,21 @@ async def analyze(path: Path, rebuild: bool = False) -> Analysis:
 
     deps = AgentDeps(project_dir=path)
 
+    logger.info("Starting analysis of %s", path)
+    logger.info("Running 5 analysis agents in parallel...")
+
     try:
+        ps = project_structure
+        bs = build_strategy
         structure, build, env, secret, style = await asyncio.gather(
-            project_structure.agent.run(project_structure.USER_PROMPT, deps=deps),
-            build_strategy.agent.run(build_strategy.USER_PROMPT, deps=deps),
-            env_vars.agent.run(env_vars.USER_PROMPT, deps=deps),
-            secrets.agent.run(secrets.USER_PROMPT, deps=deps),
-            code_style.agent.run(code_style.USER_PROMPT, deps=deps),
+            _run_agent("project_structure", ps.agent, ps.USER_PROMPT, deps),
+            _run_agent("build_strategy", bs.agent, bs.USER_PROMPT, deps),
+            _run_agent("env_vars", env_vars.agent, env_vars.USER_PROMPT, deps),
+            _run_agent("secrets", secrets.agent, secrets.USER_PROMPT, deps),
+            _run_agent("code_style", code_style.agent, code_style.USER_PROMPT, deps),
         )
     except Exception as e:
+        logger.exception("Analysis failed")
         raise AnalyzeError(f"Analysis failed: {e}") from e
 
     all_env = _merge_env_vars(env.output, secret.output)

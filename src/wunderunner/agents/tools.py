@@ -1,12 +1,16 @@
 """Filesystem tools for analysis agents."""
 
+import asyncio
 import fnmatch
+import logging
 import re
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
 from pydantic_ai import Agent, RunContext
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(slots=True)
@@ -17,6 +21,60 @@ class AgentDeps:
     max_file_size: int = 50_000
 
 
+# Directories to skip during recursive file operations
+SKIP_DIRS = frozenset({
+    ".git",
+    ".svn",
+    ".hg",
+    "node_modules",
+    ".venv",
+    "venv",
+    "__pycache__",
+    ".pytest_cache",
+    ".mypy_cache",
+    ".ruff_cache",
+    ".tox",
+    "dist",
+    "build",
+    ".next",
+    ".nuxt",
+    ".output",
+    "coverage",
+    ".turbo",
+    ".cache",
+})
+
+# File extensions to skip (binary/generated)
+SKIP_EXTENSIONS = frozenset({
+    ".pyc",
+    ".pyo",
+    ".so",
+    ".dylib",
+    ".dll",
+    ".exe",
+    ".bin",
+    ".lock",  # lock files are huge
+    ".min.js",
+    ".min.css",
+    ".map",
+    ".wasm",
+    ".png",
+    ".jpg",
+    ".jpeg",
+    ".gif",
+    ".ico",
+    ".svg",
+    ".woff",
+    ".woff2",
+    ".ttf",
+    ".eot",
+    ".pdf",
+    ".zip",
+    ".tar",
+    ".gz",
+})
+
+
 def _validate_path(deps: AgentDeps, relative_path: str) -> Path:
     """Resolve and validate path is within project directory."""
     full_path = (deps.project_dir / relative_path).resolve()
@@ -25,72 +83,106 @@ def _validate_path(deps: AgentDeps, relative_path: str) -> Path:
     return full_path
 
 
+def _iter_files(root: Path, max_files: int = 5000) -> list[Path]:
+    """Iterate files, skipping heavy directories and binary files."""
+    files = []
+    count = 0
+
+    def walk(directory: Path) -> None:
+        nonlocal count
+        if count >= max_files:
+            return
+
+        try:
+            entries = list(directory.iterdir())
+        except PermissionError:
+            return
+
+        for entry in entries:
+            if count >= max_files:
+                return
+
+            if entry.is_dir() and entry.name not in SKIP_DIRS:
+                walk(entry)
+            elif entry.is_file() and entry.suffix.lower() not in SKIP_EXTENSIONS:
+                files.append(entry)
+                count += 1
+
+    walk(root)
+    return files
+
+
 async def read_file(ctx: RunContext[AgentDeps], path: str) -> str:
     """Read file contents. Returns truncated content if file exceeds max size."""
+    logger.debug("tool:read_file(%s)", path)
     full_path = _validate_path(ctx.deps, path)
     if not full_path.exists():
         return f"Error: File not found: {path}"
     if not full_path.is_file():
         return f"Error: Not a file: {path}"
 
-    content = full_path.read_text(errors="replace")
+    content = await asyncio.to_thread(full_path.read_text, errors="replace")
     if len(content) > ctx.deps.max_file_size:
         return content[: ctx.deps.max_file_size] + f"\n... (truncated, {len(content)} bytes total)"
     return content
 
 
-async def list_dir(ctx: RunContext[AgentDeps], path: str = ".") -> str:
-    """List directory contents. Directories are suffixed with /."""
-    full_path = _validate_path(ctx.deps, path)
-    if not full_path.exists():
-        return f"Error: Directory not found: {path}"
-    if not full_path.is_dir():
-        return f"Error: Not a directory: {path}"
-
+def _list_dir_sync(full_path: Path) -> list[str]:
+    """Synchronous list_dir for thread pool."""
     entries = []
     for entry in sorted(full_path.iterdir()):
         name = entry.name
         if entry.is_dir():
             name += "/"
         entries.append(name)
+    return entries
+
+
+async def list_dir(ctx: RunContext[AgentDeps], path: str = ".") -> str:
+    """List directory contents. Directories are suffixed with /."""
+    logger.debug("tool:list_dir(%s)", path)
+    full_path = _validate_path(ctx.deps, path)
+    if not full_path.exists():
+        return f"Error: Directory not found: {path}"
+    if not full_path.is_dir():
+        return f"Error: Not a directory: {path}"
+
+    entries = await asyncio.to_thread(_list_dir_sync, full_path)
     return "\n".join(entries)
 
 
-async def glob(ctx: RunContext[AgentDeps], pattern: str) -> str:
-    """Find files matching glob pattern. Returns up to 100 matches."""
-    project_dir = ctx.deps.project_dir.resolve()
+def _glob_sync(pattern: str, project_dir: Path) -> list[str]:
+    """Synchronous glob for thread pool."""
+    files = _iter_files(project_dir)
     matches = []
 
-    for path in project_dir.rglob("*"):
-        if path.is_file() and fnmatch.fnmatch(path.name, pattern):
-            relative = path.relative_to(project_dir)
+    for file_path in files:
+        if fnmatch.fnmatch(file_path.name, pattern):
+            relative = file_path.relative_to(project_dir)
             matches.append(str(relative))
             if len(matches) >= 100:
                 break
 
+    return sorted(matches)
+
+
+async def glob(ctx: RunContext[AgentDeps], pattern: str) -> str:
+    """Find files matching glob pattern. Returns up to 100 matches."""
+    logger.debug("tool:glob(%s)", pattern)
+    project_dir = ctx.deps.project_dir.resolve()
+
+    matches = await asyncio.to_thread(_glob_sync, pattern, project_dir)
+
     if not matches:
         return f"No files matching: {pattern}"
-    return "\n".join(sorted(matches))
+    return "\n".join(matches)
 
 
-async def grep(ctx: RunContext[AgentDeps], pattern: str, path: str = ".") -> str:
-    """Search file contents for regex pattern. Returns file:line:content format."""
-    full_path = _validate_path(ctx.deps, path)
-
-    try:
-        regex = re.compile(pattern, re.IGNORECASE)
-    except re.error as e:
-        return f"Error: Invalid regex: {e}"
-
+def _grep_sync(
+    pattern: re.Pattern, files: list[Path], project_dir: Path, max_results: int = 100
+) -> list[str]:
+    """Synchronous grep implementation for thread pool."""
     results = []
-    max_results = 100
-
-    if full_path.is_file():
-        files = [full_path]
-    elif full_path.is_dir():
-        files = [f for f in full_path.rglob("*") if f.is_file()]
-    else:
-        return f"Error: Path not found: {path}"
 
     for file_path in files:
         if len(results) >= max_results:
@@ -101,12 +193,35 @@ async def grep(ctx: RunContext[AgentDeps], pattern: str, path: str = ".") -> str
         except (OSError, UnicodeDecodeError):
             continue
 
-        relative = file_path.relative_to(ctx.deps.project_dir.resolve())
+        relative = file_path.relative_to(project_dir)
         for line_num, line in enumerate(content.splitlines(), 1):
-            if regex.search(line):
+            if pattern.search(line):
                 results.append(f"{relative}:{line_num}:{line.strip()}")
                 if len(results) >= max_results:
                     break
+
+    return results
+
+
+async def grep(ctx: RunContext[AgentDeps], pattern: str, path: str = ".") -> str:
+    """Search file contents for regex pattern. Returns file:line:content format."""
+    logger.debug("tool:grep(%s, %s)", pattern, path)
+    full_path = _validate_path(ctx.deps, path)
+
+    try:
+        regex = re.compile(pattern, re.IGNORECASE)
+    except re.error as e:
+        return f"Error: Invalid regex: {e}"
+
+    if full_path.is_file():
+        files = [full_path]
+    elif full_path.is_dir():
+        files = _iter_files(full_path)
+    else:
+        return f"Error: Path not found: {path}"
+
+    project_dir = ctx.deps.project_dir.resolve()
+    results = await asyncio.to_thread(_grep_sync, regex, files, project_dir)
 
     if not results:
         return f"No matches for: {pattern}"
@@ -115,11 +230,12 @@ async def grep(ctx: RunContext[AgentDeps], pattern: str, path: str = ".") -> str
 
 async def file_stats(ctx: RunContext[AgentDeps], path: str) -> str:
     """Get file metadata: size and modification time."""
+    logger.debug("tool:file_stats(%s)", path)
     full_path = _validate_path(ctx.deps, path)
     if not full_path.exists():
         return f"Error: File not found: {path}"
 
-    stat = full_path.stat()
+    stat = await asyncio.to_thread(full_path.stat)
     size = stat.st_size
     mtime = datetime.fromtimestamp(stat.st_mtime).isoformat()
     return f"size: {size} bytes\nmodified: {mtime}"

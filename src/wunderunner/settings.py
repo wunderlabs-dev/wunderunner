@@ -17,6 +17,7 @@ class Settings(BaseSettings):
 
     anthropic_api_key: str | None = None
     openai_api_key: str | None = None
+    logfire_token: str | None = None
     max_attempts: int = 3
 
     # Cache settings

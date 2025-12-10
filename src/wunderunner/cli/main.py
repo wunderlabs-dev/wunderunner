@@ -1,16 +1,53 @@
 """Command-line interface for wunderunner."""
 
 import asyncio
+import logging
 import sys
 from pathlib import Path
 from typing import Annotated
 
 import typer
 from rich.console import Console
+from rich.logging import RichHandler
 from rich.prompt import Prompt
 
+from wunderunner.settings import get_settings
 from wunderunner.workflows.containerize import Analyze, containerize_graph
 from wunderunner.workflows.state import ContainerizeState, Learning, Severity
+
+
+def _setup_logging(verbose: bool = False) -> None:
+    """Configure logging with Rich handler."""
+    level = logging.DEBUG if verbose else logging.INFO
+    logging.basicConfig(
+        level=level,
+        format="%(message)s",
+        datefmt="[%X]",
+        handlers=[RichHandler(rich_tracebacks=True, show_path=False)],
+    )
+    # Quiet noisy libraries
+    logging.getLogger("httpx").setLevel(logging.WARNING)
+    logging.getLogger("httpcore").setLevel(logging.WARNING)
+    logging.getLogger("openai").setLevel(logging.WARNING)
+    logging.getLogger("anthropic").setLevel(logging.WARNING)
+
+
+def _configure_logfire() -> None:
+    """Configure logfire if available and token is present."""
+    settings = get_settings()
+    if not settings.logfire_token:
+        return
+
+    try:
+        import logfire
+
+        logfire.configure(
+            service_name="wunderunner",
+            send_to_logfire="if-token-present",
+        )
+        logfire.instrument_pydantic_ai()
+    except ImportError:
+        pass
 
 app = typer.Typer(
     name="wunderunner",
@@ -101,8 +138,17 @@ def init(
             help="Force rebuild from scratch, ignore cached analysis.",
         ),
     ] = False,
+    verbose: Annotated[
+        bool,
+        typer.Option(
+            "--verbose", "-v",
+            help="Enable verbose logging.",
+        ),
+    ] = False,
 ) -> None:
     """Analyze a project and generate Docker configuration."""
+    _setup_logging(verbose)
+    _configure_logfire()
     project_path = _validate_project_path(project_path)
     console = Console()
 
