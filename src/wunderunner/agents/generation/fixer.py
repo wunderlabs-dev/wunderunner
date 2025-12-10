@@ -1,5 +1,6 @@
 """Project fixer agent - can modify project files to fix issues."""
 
+import asyncio
 import logging
 
 from jinja2 import Template
@@ -108,6 +109,13 @@ class FixResult(BaseModel):
     explanation: str
 
 
+def _write_file_sync(full_path, content: str) -> str:
+    """Synchronous write for thread pool."""
+    full_path.parent.mkdir(parents=True, exist_ok=True)
+    full_path.write_text(content)
+    return f"Successfully wrote {len(content)} bytes to {full_path.name}"
+
+
 async def write_file(ctx: RunContext[AgentDeps], path: str, content: str) -> str:
     """Write content to a file in the project directory."""
     logger.debug("tool:write_file(%s)", path)
@@ -124,9 +132,7 @@ async def write_file(ctx: RunContext[AgentDeps], path: str, content: str) -> str
         return f"Error: Refusing to overwrite sensitive file: {path}"
 
     try:
-        full_path.parent.mkdir(parents=True, exist_ok=True)
-        full_path.write_text(content)
-        return f"Successfully wrote {len(content)} bytes to {path}"
+        return await asyncio.to_thread(_write_file_sync, full_path, content)
     except OSError as e:
         return f"Error writing file: {e}"
 
