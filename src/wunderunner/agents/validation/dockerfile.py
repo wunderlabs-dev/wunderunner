@@ -65,10 +65,10 @@ Deductions: -5 per wrong format, -10 per missing secret
 <section name="high_priority" points="30">
 <category name="package_manager" points="15">
 Grade INTERNAL CONSISTENCY only:
-- 15 points: Lockfile copied, install command matches, deps installed before source
-- 10 points: Consistent but wrong order (deps after source)
-- 5 points: Minor inconsistencies but should work
-- 0 points: Lockfile and install command mismatch
+- 15 points: Deps installed before source copy (layer caching)
+- 10 points: Deps after source but should work
+- 5 points: Minor inconsistencies but functional
+- 0 points: Missing dependency install
 </category>
 
 <category name="source_copy" points="10">

@@ -13,22 +13,8 @@ RUNTIME_TEMPLATES = {
 # Node.js development container
 FROM node:{{ version }}-alpine
 WORKDIR /app
-{% if lockfile == "package-lock.json" %}
-COPY package.json package-lock.json ./
-RUN npm ci
-{% elif lockfile == "yarn.lock" %}
-COPY package.json yarn.lock ./
-RUN yarn install --frozen-lockfile
-{% elif lockfile == "pnpm-lock.yaml" %}
-COPY package.json pnpm-lock.yaml ./
-RUN corepack enable && pnpm install --frozen-lockfile
-{% elif lockfile == "bun.lockb" %}
-COPY package.json bun.lockb ./
-RUN bun install --frozen-lockfile
-{% else %}
-COPY package.json ./
+COPY package.json {% if lockfile %}{{ lockfile }} {% endif %}./
 RUN npm install
-{% endif %}
 COPY . .
 {% if build_command %}
 RUN {{ build_command }}
@@ -41,14 +27,14 @@ CMD {{ start_command }}
 FROM python:{{ version }}-slim
 WORKDIR /app
 {% if package_manager == "uv" %}
-COPY pyproject.toml uv.lock ./
-RUN pip install uv && uv sync --frozen
+COPY pyproject.toml {% if lockfile %}{{ lockfile }} {% endif %}./
+RUN pip install uv && uv sync
 {% elif package_manager == "poetry" %}
-COPY pyproject.toml poetry.lock ./
+COPY pyproject.toml {% if lockfile %}{{ lockfile }} {% endif %}./
 RUN pip install poetry && poetry install
 {% elif package_manager == "pip" %}
 COPY requirements.txt ./
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install -r requirements.txt
 {% else %}
 COPY pyproject.toml ./
 RUN pip install -e .
@@ -136,7 +122,6 @@ Generate a development Dockerfile. Follow the pattern provided but adapt to the 
 
 <rules>
 <rule>Copy lockfile and install deps BEFORE copying source (layer caching)</rule>
-<rule>Use --frozen-lockfile or equivalent (reproducible builds)</rule>
 <rule>Include dev dependencies - this is a development container</rule>
 <rule>If secrets are listed, add ARG + ENV for each before any RUN that needs them</rule>
 <rule>Keep it simple - 10-20 lines is ideal</rule>
