@@ -41,6 +41,9 @@ Issues = "https://github.com/wunderlabs/wunderunner/issues"
 [project.optional-dependencies]
 dev = [
     "logfire>=3.0.0",
+    "pytest>=8.0.0",
+    "pytest-asyncio>=1.0.0",
+    "ruff>=0.8.0",
 ]
 
 [project.scripts]
