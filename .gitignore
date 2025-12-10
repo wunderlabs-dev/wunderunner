@@ -53,3 +53,7 @@ Thumbs.db
 
 # Project-specific
 .wunderunner/
+
+# Env
+.env
+.env.local
