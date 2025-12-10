@@ -118,7 +118,6 @@ agent = Agent(
     deps_type=AgentDeps,
     system_prompt=SYSTEM_PROMPT,
     defer_model_check=True,
-    max_result_retries=3,  # Limit retries on invalid output
 )
 
 register_tools(agent, include_write=True)
