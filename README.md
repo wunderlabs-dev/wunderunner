@@ -38,6 +38,12 @@ Built with [Pydantic AI](https://ai.pydantic.dev/) for structured agent workflow
 
 ---
 
+
+
+https://github.com/user-attachments/assets/a234b4a0-bc66-4551-9222-1c777b18d7c5
+
+
+
 ## Quick Start
 
 ```bash
