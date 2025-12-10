@@ -6,7 +6,6 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import docker
-from docker.errors import BuildError as DockerBuildError
 from docker.errors import ImageNotFound
 
 from wunderunner.exceptions import BuildError
@@ -84,48 +83,47 @@ async def build(path: Path, dockerfile_content: str) -> BuildResult:
         return BuildResult(image_id=image.id, cache_hit=True)
 
     # Build the image with streaming logs
+    # Use low-level API to get streaming logs
+    build_output = client.api.build(
+        path=str(path),
+        dockerfile=str(dockerfile_path.relative_to(path)),
+        tag=tag,
+        rm=True,
+        forcerm=True,
+        decode=True,
+    )
+
+    logs = []
+    has_error = False
+    for chunk in build_output:
+        if "stream" in chunk:
+            line = chunk["stream"].rstrip()
+            if line:
+                logger.info("  %s", line)
+                logs.append(chunk["stream"])
+        elif "error" in chunk:
+            logger.error("  %s", chunk["error"])
+            logs.append(chunk["error"])
+            has_error = True
+        elif "status" in chunk:
+            # Pull progress
+            status = chunk.get("status", "")
+            progress = chunk.get("progress", "")
+            if progress:
+                logger.debug("  %s %s", status, progress)
+            elif status:
+                logger.info("  %s", status)
+
+    # Check if build failed
+    if has_error:
+        output = "".join(logs)
+        raise BuildError(f"Docker build failed:\n{output}")
+
+    # Get the built image
     try:
-        # Use low-level API to get streaming logs
-        build_output = client.api.build(
-            path=str(path),
-            dockerfile=str(dockerfile_path.relative_to(path)),
-            tag=tag,
-            rm=True,
-            forcerm=True,
-            decode=True,
-        )
-
-        logs = []
-        for chunk in build_output:
-            if "stream" in chunk:
-                line = chunk["stream"].rstrip()
-                if line:
-                    logger.info("  %s", line)
-                    logs.append(chunk["stream"])
-            elif "error" in chunk:
-                logger.error("  %s", chunk["error"])
-                logs.append(chunk["error"])
-            elif "status" in chunk:
-                # Pull progress
-                status = chunk.get("status", "")
-                progress = chunk.get("progress", "")
-                if progress:
-                    logger.debug("  %s %s", status, progress)
-                elif status:
-                    logger.info("  %s", status)
-
-        # Get the built image
         image = client.images.get(tag)
         return BuildResult(image_id=image.id, cache_hit=False)
-
-    except DockerBuildError as e:
-        logs = []
-        for chunk in e.build_log:
-            if "stream" in chunk:
-                logs.append(chunk["stream"])
-            elif "error" in chunk:
-                logs.append(chunk["error"])
+    except ImageNotFound as e:
+        # Build completed but image not found - include logs for debugging
         output = "".join(logs)
-        raise BuildError(f"Docker build failed:\n{output}") from e
-    except Exception as e:
-        raise BuildError(f"Docker build failed: {e}") from e
+        raise BuildError(f"Docker build failed (image not created):\n{output}") from e
