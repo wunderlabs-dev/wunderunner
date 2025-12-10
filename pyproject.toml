@@ -1,6 +1,6 @@
 [project]
 name = "wxr"
-version = "0.1.1"
+version = "0.1.2"
 description = "AI-powered Docker configuration generator with self-healing builds"
 readme = "README.md"
 license = "MIT"
