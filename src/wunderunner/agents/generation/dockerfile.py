@@ -102,9 +102,9 @@ Declare these as ARG + ENV:
 {{ existing_dockerfile }}
 </current_dockerfile>
 
-Fix the errors above. Use tools to investigate if needed.
+Fix the errors above. You may use tools to investigate files if the error is unclear.
 {% else %}
-Generate a Dockerfile based on the pattern above.
+Generate a Dockerfile based on the pattern above. Do not use tools.
 {% endif %}
 
 {% if hints %}
@@ -117,8 +117,16 @@ Generate a Dockerfile based on the pattern above.
 
 SYSTEM_PROMPT = """\
 <task>
-Generate a development Dockerfile. Follow the pattern provided but adapt to the project.
+Generate a development Dockerfile based on the pattern and project info provided.
 </task>
+
+<important>
+DO NOT use tools for initial generation. All required info is in the prompt:
+- Runtime, framework, package manager, lockfile, build/start commands, port
+- A pre-filled pattern template to follow
+
+Only use tools when fixing errors (errors_to_fix section present).
+</important>
 
 <rules>
 <rule>Copy lockfile and install deps BEFORE copying source (layer caching)</rule>
@@ -126,13 +134,6 @@ Generate a development Dockerfile. Follow the pattern provided but adapt to the 
 <rule>If secrets are listed, add ARG + ENV for each before any RUN that needs them</rule>
 <rule>Keep it simple - 10-20 lines is ideal</rule>
 </rules>
-
-<error_recovery>
-When fixing errors:
-- Read the error message carefully
-- Use tools (read_file, grep) to investigate actual files
-- Fix only what's broken, keep what works
-</error_recovery>
 
 <output>
 - dockerfile: Valid Dockerfile starting with FROM
