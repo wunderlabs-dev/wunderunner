@@ -15,6 +15,30 @@ USER_PROMPT = Template("""\
 {{ dockerfile }}
 </dockerfile>
 
+{% if secrets %}
+<required_secrets>
+The following secrets must be passed via build args and environment:
+{% for secret in secrets %}
+- {{ secret.name }}{% if secret.service %} ({{ secret.service }}){% endif %}
+
+{% endfor %}
+Add build args and environment for each:
+```yaml
+services:
+  app:
+    build:
+      args:
+{% for secret in secrets %}
+        - {{ secret.name }}
+{% endfor %}
+    environment:
+{% for secret in secrets %}
+      - {{ secret.name }}
+{% endfor %}
+```
+</required_secrets>
+{% endif %}
+
 {% if learnings %}
 <previous_learnings>
 {% for learning in learnings %}

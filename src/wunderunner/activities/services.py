@@ -48,9 +48,13 @@ async def generate(
     Raises:
         ServicesError: If generation/refinement fails.
     """
+    # Extract secrets from analysis
+    secrets = [v for v in analysis.env_vars if v.secret]
+
     prompt = compose_agent.USER_PROMPT.render(
         analysis=analysis.model_dump(),
         dockerfile=dockerfile_content,
+        secrets=secrets,
         learnings=learnings,
         hints=hints,
         existing_compose=existing,

@@ -56,8 +56,12 @@ async def generate(
     historical_fixes = context.get_dockerfile_fixes() if context else []
     context_summary = context.summary if context else None
 
+    # Extract secrets from analysis
+    secrets = [v for v in analysis.env_vars if v.secret]
+
     prompt = dockerfile_agent.USER_PROMPT.render(
         analysis=analysis.model_dump(),
+        secrets=secrets,
         learnings=learnings,
         hints=hints,
         existing_dockerfile=existing,

@@ -12,6 +12,17 @@ USER_PROMPT = Template("""\
 {{ analysis | tojson(indent=2) }}
 </project_analysis>
 
+{% if secrets %}
+<required_secrets>
+The following secrets MUST be declared as ARG and ENV in the Dockerfile:
+{% for secret in secrets %}
+- {{ secret.name }}{% if secret.service %} ({{ secret.service }}){% endif %}
+
+{% endfor %}
+For each secret above, add both ARG and ENV declarations.
+</required_secrets>
+{% endif %}
+
 {% if context_summary %}
 <historical_learnings>
 Summary of past attempts and fixes:
@@ -196,17 +207,30 @@ Express/Fastify/NestJS:
 </framework_specific>
 
 <secrets_and_env_vars>
-For secrets (env vars with secret=True in analysis):
-- Do NOT hardcode values in Dockerfile
-- Use ARG for build-time secrets if needed during build
-- Use ENV to declare runtime variables (values provided at container start)
+CRITICAL: All secrets listed in <required_secrets> MUST have ARG and ENV declarations.
 
-Pattern for build-time secrets:
+For EACH secret in the list, add these two lines in the Dockerfile:
+ARG SECRET_NAME
+ENV SECRET_NAME=$SECRET_NAME
+
+Example - if secrets are OPENAI_API_KEY and DATABASE_URL:
+```dockerfile
+# After FROM and WORKDIR, before COPY
+ARG OPENAI_API_KEY
+ENV OPENAI_API_KEY=$OPENAI_API_KEY
+
 ARG DATABASE_URL
 ENV DATABASE_URL=$DATABASE_URL
+```
 
-Pattern for runtime-only secrets (preferred):
-- Just document in comments or don't include - they'll be passed via docker run -e
+This allows secrets to be passed at build time via:
+  docker build --build-arg OPENAI_API_KEY=xxx --build-arg DATABASE_URL=xxx .
+
+Do NOT:
+- Hardcode secret values
+- Skip any secret from the required_secrets list
+- Use only ARG without ENV (runtime needs ENV)
+- Use only ENV without ARG (build needs ARG for --build-arg)
 </secrets_and_env_vars>
 
 <multi_stage_builds>
