@@ -4,6 +4,7 @@ from wunderunner.agents.validation import dockerfile as dockerfile_agent
 from wunderunner.exceptions import ValidationError
 from wunderunner.models.analysis import Analysis
 from wunderunner.models.validation import ValidationResult
+from wunderunner.settings import Validation, get_fallback_model
 from wunderunner.validation.dockerfile import validate_dockerfile_syntax
 from wunderunner.workflows.state import Learning
 
@@ -50,7 +51,10 @@ async def validate(
     )
 
     try:
-        result = await dockerfile_agent.agent.run(prompt)
+        result = await dockerfile_agent.agent.run(
+            prompt,
+            model=get_fallback_model(Validation.DOCKERFILE),
+        )
         validation = result.output
 
         # Ensure is_valid matches grade threshold

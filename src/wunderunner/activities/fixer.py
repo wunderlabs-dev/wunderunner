@@ -8,6 +8,7 @@ from pydantic_ai import UsageLimits
 from wunderunner.agents.generation import fixer as fixer_agent
 from wunderunner.agents.tools import AgentDeps
 from wunderunner.models.analysis import Analysis
+from wunderunner.settings import Generation, get_fallback_model
 from wunderunner.workflows.state import Learning
 
 logger = logging.getLogger(__name__)
@@ -51,7 +52,12 @@ async def fix_project(
     deps = AgentDeps(project_dir=project_path)
 
     try:
-        result = await fixer_agent.agent.run(prompt, deps=deps, usage_limits=USAGE_LIMITS)
+        result = await fixer_agent.agent.run(
+            prompt,
+            model=get_fallback_model(Generation.DOCKERFILE),
+            deps=deps,
+            usage_limits=USAGE_LIMITS,
+        )
         fix_result = result.output
 
         if fix_result.fixed:

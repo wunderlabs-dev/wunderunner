@@ -26,58 +26,63 @@ class AgentDeps:
 def _get_skip_dirs() -> frozenset[str]:
     """Get directories to skip, including our cache dir from settings."""
     settings = get_settings()
-    return frozenset({
-        ".git",
-        ".svn",
-        ".hg",
-        settings.cache_dir,  # Our internal work directory
-        "node_modules",
-        ".venv",
-        "venv",
-        "__pycache__",
-        ".pytest_cache",
-        ".mypy_cache",
-        ".ruff_cache",
-        ".tox",
-        "dist",
-        "build",
-        ".next",
-        ".nuxt",
-        ".output",
-        "coverage",
-        ".turbo",
-        ".cache",
-    })
+    return frozenset(
+        {
+            ".git",
+            ".svn",
+            ".hg",
+            settings.cache_dir,  # Our internal work directory
+            "node_modules",
+            ".venv",
+            "venv",
+            "__pycache__",
+            ".pytest_cache",
+            ".mypy_cache",
+            ".ruff_cache",
+            ".tox",
+            "dist",
+            "build",
+            ".next",
+            ".nuxt",
+            ".output",
+            "coverage",
+            ".turbo",
+            ".cache",
+        }
+    )
+
 
 # File extensions to skip (binary/generated)
-SKIP_EXTENSIONS = frozenset({
-    ".pyc",
-    ".pyo",
-    ".so",
-    ".dylib",
-    ".dll",
-    ".exe",
-    ".bin",
-    ".lock",  # lock files are huge
-    ".min.js",
-    ".min.css",
-    ".map",
-    ".wasm",
-    ".png",
-    ".jpg",
-    ".jpeg",
-    ".gif",
-    ".ico",
-    ".svg",
-    ".woff",
-    ".woff2",
-    ".ttf",
-    ".eot",
-    ".pdf",
-    ".zip",
-    ".tar",
-    ".gz",
-})
+SKIP_EXTENSIONS = frozenset(
+    {
+        ".pyc",
+        ".pyo",
+        ".so",
+        ".dylib",
+        ".dll",
+        ".exe",
+        ".bin",
+        ".lock",  # lock files are huge
+        ".min.js",
+        ".min.css",
+        ".map",
+        ".wasm",
+        ".png",
+        ".jpg",
+        ".jpeg",
+        ".gif",
+        ".ico",
+        ".svg",
+        ".woff",
+        ".woff2",
+        ".ttf",
+        ".eot",
+        ".pdf",
+        ".zip",
+        ".tar",
+        ".gz",
+    }
+)
 
 
 def _validate_path(deps: AgentDeps, relative_path: str) -> Path:

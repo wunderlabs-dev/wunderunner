@@ -15,6 +15,8 @@ from wunderunner.agents.generation import compose as compose_agent
 from wunderunner.agents.tools import AgentDeps
 from wunderunner.exceptions import HealthcheckError, ServicesError, StartError
 from wunderunner.models.analysis import Analysis
+from wunderunner.models.generation import strip_markdown_fences
+from wunderunner.settings import Generation, get_fallback_model
 from wunderunner.workflows.state import Learning
 
 
@@ -62,8 +64,12 @@ async def generate(
     deps = AgentDeps(project_dir=project_path) if project_path else None
 
     try:
-        result = await compose_agent.agent.run(prompt, deps=deps)
-        return result.output
+        result = await compose_agent.agent.run(
+            prompt,
+            model=get_fallback_model(Generation.COMPOSE),
+            deps=deps,
+        )
+        return strip_markdown_fences(result.output)
     except Exception as e:
         raise ServicesError(f"Failed to generate docker-compose.yaml: {e}") from e
 

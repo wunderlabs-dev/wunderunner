@@ -14,6 +14,7 @@ from wunderunner.exceptions import DockerfileError
 from wunderunner.models.analysis import Analysis
 from wunderunner.models.context import ContextEntry, EntryType
 from wunderunner.models.generation import DockerfileResult
+from wunderunner.settings import Generation, Validation, get_fallback_model
 from wunderunner.storage.context import add_entry, load_context, save_context
 from wunderunner.workflows.state import Learning
 
@@ -89,6 +90,7 @@ async def generate(
     try:
         result = await dockerfile_agent.agent.run(
             prompt,
+            model=get_fallback_model(Generation.DOCKERFILE),
             deps=deps,
             message_history=message_history,
             usage_limits=USAGE_LIMITS,
@@ -131,7 +133,10 @@ async def _check_regressions(
     )
 
     try:
-        regression_result = await regression_agent.agent.run(prompt)
+        regression_result = await regression_agent.agent.run(
+            prompt,
+            model=get_fallback_model(Validation.DOCKERFILE),
+        )
         check = regression_result.output
 
         if check.has_regression:

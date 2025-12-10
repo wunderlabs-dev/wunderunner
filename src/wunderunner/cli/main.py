@@ -51,6 +51,7 @@ def _configure_logfire() -> None:
     except ImportError:
         pass
 
+
 app = typer.Typer(
     name="wunderunner",
     help="AI-powered Docker configuration generator.",
@@ -143,7 +144,8 @@ def init(
     verbose: Annotated[
         bool,
         typer.Option(
-            "--verbose", "-v",
+            "--verbose",
+            "-v",
             help="Enable verbose logging.",
         ),
     ] = False,

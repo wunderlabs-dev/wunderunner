@@ -1,6 +1,20 @@
 """Pydantic models for generation results."""
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
+
+
+def strip_markdown_fences(content: str) -> str:
+    """Strip markdown code fences from content if present."""
+    content = content.strip()
+    # Remove ```dockerfile, ```yaml, or ``` at start
+    for prefix in ("```dockerfile", "```yaml", "```"):
+        if content.startswith(prefix):
+            content = content[len(prefix) :]
+            break
+    # Remove ``` at end
+    if content.endswith("```"):
+        content = content[:-3]
+    return content.strip()
 
 
 class DockerfileResult(BaseModel):
@@ -16,3 +30,9 @@ class DockerfileResult(BaseModel):
     reasoning: str = Field(
         description="Brief explanation of why this Dockerfile should work and what was fixed"
     )
+
+    @field_validator("dockerfile", mode="after")
+    @classmethod
+    def strip_fences(cls, v: str) -> str:
+        """Strip markdown code fences if the model included them."""
+        return strip_markdown_fences(v)

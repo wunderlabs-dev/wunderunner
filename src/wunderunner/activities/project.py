@@ -16,7 +16,8 @@ from wunderunner.agents.analysis import (
 from wunderunner.agents.tools import AgentDeps
 from wunderunner.exceptions import AnalyzeError
 from wunderunner.models.analysis import Analysis, EnvVar
-from wunderunner.settings import get_settings
+from wunderunner.settings import Analysis as AnalysisAgent
+from wunderunner.settings import get_fallback_model, get_settings
 
 logger = logging.getLogger(__name__)
 
@@ -31,11 +32,11 @@ def _merge_env_vars(env_vars: list[EnvVar], secrets: list[EnvVar]) -> list[EnvVa
     return list(by_name.values())
 
 
-async def _run_agent(name: str, agent, prompt: str, deps: AgentDeps):
-    """Run an agent with logging."""
+async def _run_agent(name: str, agent, prompt: str, deps: AgentDeps, agent_type: AnalysisAgent):
+    """Run an agent with logging and fallback model support."""
     logger.info("  [%s] starting...", name)
     try:
-        result = await agent.run(prompt, deps=deps)
+        result = await agent.run(prompt, model=get_fallback_model(agent_type), deps=deps)
         logger.info("  [%s] completed", name)
         return result
     except Exception as e:
@@ -81,11 +82,23 @@ async def analyze(path: Path, rebuild: bool = False) -> Analysis:
         ps = project_structure
         bs = build_strategy
         structure, build, env, secret, style = await asyncio.gather(
-            _run_agent("project_structure", ps.agent, ps.USER_PROMPT, deps),
-            _run_agent("build_strategy", bs.agent, bs.USER_PROMPT, deps),
-            _run_agent("env_vars", env_vars.agent, env_vars.USER_PROMPT, deps),
-            _run_agent("secrets", secrets.agent, secrets.USER_PROMPT, deps),
-            _run_agent("code_style", code_style.agent, code_style.USER_PROMPT, deps),
+            _run_agent(
+                "project_structure", ps.agent, ps.USER_PROMPT, deps, AnalysisAgent.PROJECT_STRUCTURE
+            ),
+            _run_agent(
+                "build_strategy", bs.agent, bs.USER_PROMPT, deps, AnalysisAgent.BUILD_STRATEGY
+            ),
+            _run_agent(
+                "env_vars", env_vars.agent, env_vars.USER_PROMPT, deps, AnalysisAgent.ENV_VARS
+            ),
+            _run_agent("secrets", secrets.agent, secrets.USER_PROMPT, deps, AnalysisAgent.SECRETS),
+            _run_agent(
+                "code_style",
+                code_style.agent,
+                code_style.USER_PROMPT,
+                deps,
+                AnalysisAgent.CODE_STYLE,
+            ),
         )
     except Exception as e:
         logger.exception("Analysis failed")
