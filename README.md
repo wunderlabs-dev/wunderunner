@@ -41,10 +41,11 @@ Built with [Pydantic AI](https://ai.pydantic.dev/) for structured agent workflow
 ---
 
 
-https://github.com/user-attachments/assets/e14a83c1-6cfe-449b-a43e-d6c0ac47904d
+https://github.com/user-attachments/assets/5597a191-64cf-4446-a060-38ace7acd6e6
 
 
 ## Quick Start
+
 
 ```bash
 # Set your API key
