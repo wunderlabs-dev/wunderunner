@@ -51,8 +51,12 @@ Total: 100 points (+ up to 10 bonus)
   - Correct format: `ARG SECRET_NAME` and `ENV SECRET_NAME=$SECRET_NAME`
   - Declared before any RUN command that needs them
   - No hardcoded secret values
+  - **If no secrets required: automatic 30 points** (check env_vars for secret=true)
 - **15 points**: Secrets declared but some issues (wrong order, formatting)
 - **0 points**: Missing required secrets or hardcoded values
+
+**CRITICAL**: Check project_analysis.env_vars to see which vars have secret=true.
+If NO env_vars have secret=true, give full 30 points - no secrets section needed.
 
 **Important**: Only grade ACTUAL secrets that grant access (API keys, credentials).
 Public identifiers (tracking IDs, publishable keys) are NOT secrets:
@@ -60,7 +64,7 @@ Public identifiers (tracking IDs, publishable keys) are NOT secrets:
 - Google Analytics IDs (G-*, UA-*), Stripe publishable keys (pk_*) are NOT secrets
 - Firebase public config, Sentry DSNs are NOT secrets
 
-**Deductions**:
+**Deductions** (only if secrets ARE required):
 - -5 points per secret with wrong format
 - -10 points per missing required secret
 
