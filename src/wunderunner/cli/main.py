@@ -2,6 +2,7 @@
 
 import asyncio
 import logging
+import re
 import sys
 from pathlib import Path
 from typing import Annotated
@@ -176,7 +177,15 @@ def init(
         sys.exit(130)
 
     console.print("\n[green bold]✓ Containerization complete![/green bold]")
-    console.print("  [dim]Dockerfile and docker-compose.yaml written to project root[/dim]\n")
+    console.print("  [dim]Dockerfile and docker-compose.yaml written to project root[/dim]")
+
+    # Extract and display port URL from compose content
+    if state.compose_content:
+        port_match = re.search(r'ports:\s*\n\s*-\s*["\']?(\d+):', state.compose_content)
+        if port_match:
+            host_port = port_match.group(1)
+            console.print(f"  [dim]Open app at[/dim] [cyan]http://localhost:{host_port}[/cyan]")
+    console.print()
 
 
 if __name__ == "__main__":
