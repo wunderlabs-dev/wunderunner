@@ -89,19 +89,24 @@ Your output must be valid YAML for docker-compose v3.8+ format.
 </core_principles>
 
 <compose_structure>
-A good docker-compose.yaml follows this pattern:
+A minimal docker-compose.yaml:
 
 ```yaml
-version: '3.8'
-
 services:
   app:
     build: .
     ports:
       - "3000:3000"
-    volumes:
-      - .:/app
-      - /app/node_modules
+```
+
+With a database (only if needed):
+
+```yaml
+services:
+  app:
+    build: .
+    ports:
+      - "3000:3000"
     depends_on:
       - db
 
@@ -111,11 +116,6 @@ services:
       POSTGRES_USER: app
       POSTGRES_PASSWORD: password
       POSTGRES_DB: app
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-
-volumes:
-  postgres_data:
 ```
 </compose_structure>
 
@@ -170,18 +170,7 @@ environment:
 </environment_variables>
 
 <volumes>
-Development volumes for live reload:
-```yaml
-volumes:
-  - .:/app           # Mount project for live changes
-  - /app/node_modules  # Exclude node_modules (use container's)
-```
-
-Production volumes (persistent data only):
-```yaml
-volumes:
-  - postgres_data:/var/lib/postgresql/data
-```
+Only use volumes for database persistence. Do not add volume mounts for the app service.
 </volumes>
 
 <healthchecks>
