@@ -1,5 +1,5 @@
 [project]
-name = "wunderunner"
+name = "wxr"
 version = "0.1.0"
 description = "AI-powered Docker configuration generator with self-healing builds"
 readme = "README.md"
