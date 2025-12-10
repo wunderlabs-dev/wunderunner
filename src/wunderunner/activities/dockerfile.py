@@ -54,19 +54,30 @@ async def generate(
     # Load historical context for regression prevention
     context = await load_context(project_path) if project_path else None
     historical_fixes = context.get_dockerfile_fixes() if context else []
-    context_summary = context.summary if context else None
 
     # Extract secrets from analysis
     secrets = [v for v in analysis.env_vars if v.secret]
 
+    # Get runtime-specific template
+    analysis_dict = analysis.model_dump()
+    project = analysis_dict.get("project_structure", {})
+    build = analysis_dict.get("build_strategy", {})
+    runtime = project.get("runtime", "node")
+    runtime_template = dockerfile_agent.get_runtime_template(runtime, analysis_dict)
+
     prompt = dockerfile_agent.USER_PROMPT.render(
-        analysis=analysis.model_dump(),
+        runtime=runtime,
+        framework=project.get("framework"),
+        package_manager=build.get("package_manager", "npm"),
+        lockfile=build.get("lockfile"),
+        build_command=build.get("build_command"),
+        start_command=build.get("start_command", '["npm", "start"]'),
+        port=project.get("port", 3000),
+        runtime_template=runtime_template,
         secrets=secrets,
         learnings=learnings,
         hints=hints,
         existing_dockerfile=existing,
-        historical_fixes=historical_fixes,
-        context_summary=context_summary,
     )
 
     deps = AgentDeps(project_dir=project_path) if project_path else None
