@@ -16,6 +16,7 @@ class Phase(StrEnum):
     BUILD = "build"
     START = "start"
     HEALTHCHECK = "healthcheck"
+    FIXER = "fixer"
 
 
 class Severity(StrEnum):

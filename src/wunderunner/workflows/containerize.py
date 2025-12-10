@@ -7,7 +7,7 @@ from dataclasses import dataclass
 import aiofiles
 from pydantic_graph import BaseNode, End, Graph, GraphRunContext
 
-from wunderunner.activities import docker, dockerfile, project, services, validation
+from wunderunner.activities import docker, dockerfile, fixer, project, services, validation
 from wunderunner.exceptions import (
     BuildError,
     DockerfileError,
@@ -281,14 +281,19 @@ class Healthcheck(BaseNode[ContainerizeState]):
 
 @dataclass
 class RetryOrHint(BaseNode[ContainerizeState]):
-    """Decision: auto-retry or ask human for hint."""
+    """Decision: try fixer, auto-retry, or ask human for hint."""
 
     learning: Learning
 
-    async def run(self, ctx: Ctx) -> Dockerfile | HumanHint:
+    async def run(self, ctx: Ctx) -> FixProject | Dockerfile | HumanHint:
         progress = ctx.state.on_progress
         settings = get_settings()
         ctx.state.attempts_since_hint += 1
+
+        # For runtime errors (build/start/healthcheck), try fixing project first
+        runtime_phases = {Phase.BUILD, Phase.START, Phase.HEALTHCHECK}
+        if self.learning.phase in runtime_phases:
+            return FixProject(learning=self.learning)
 
         if ctx.state.attempts_since_hint < settings.max_attempts:
             remaining = settings.max_attempts - ctx.state.attempts_since_hint
@@ -319,6 +324,52 @@ class HumanHint(BaseNode[ContainerizeState]):
         return Dockerfile()
 
 
+@dataclass
+class FixProject(BaseNode[ContainerizeState]):
+    """Attempt to fix project files based on runtime errors."""
+
+    learning: Learning
+
+    async def run(self, ctx: Ctx) -> Dockerfile | HumanHint:
+        progress = ctx.state.on_progress
+        settings = get_settings()
+
+        progress(Severity.INFO, "Attempting to fix project files...")
+
+        fix_result = await fixer.fix_project(
+            learning=self.learning,
+            dockerfile_content=ctx.state.dockerfile_content,
+            compose_content=ctx.state.compose_content,
+            project_path=ctx.state.path,
+        )
+
+        if fix_result.fixed:
+            progress(Severity.SUCCESS, f"Project fixed: {fix_result.explanation}")
+            for change in fix_result.changes:
+                progress(Severity.INFO, f"  Modified: {change}")
+            # Reset retry counter since we made progress
+            ctx.state.attempts_since_hint = 0
+            return Dockerfile()
+
+        # Fixer couldn't help - record as learning and continue retry logic
+        progress(Severity.WARNING, f"Could not fix project: {fix_result.explanation}")
+        fixer_learning = Learning(
+            phase=Phase.FIXER,
+            error_type="FixerFailed",
+            error_message=fix_result.explanation,
+            context=f"Original error: {self.learning.error_message}",
+        )
+        ctx.state.learnings.append(fixer_learning)
+
+        # Check if we've exceeded attempts
+        if ctx.state.attempts_since_hint >= settings.max_attempts:
+            return HumanHint()
+
+        remaining = settings.max_attempts - ctx.state.attempts_since_hint
+        progress(Severity.INFO, f"Retrying Dockerfile... ({remaining} attempts remaining)")
+        return Dockerfile()
+
+
 containerize_graph = Graph(
     nodes=[
         Analyze,
@@ -331,6 +382,7 @@ containerize_graph = Graph(
         Healthcheck,
         RetryOrHint,
         HumanHint,
+        FixProject,
     ],
     state_type=ContainerizeState,
     run_end_type=Success,
