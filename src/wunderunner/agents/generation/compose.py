@@ -1,234 +1,77 @@
 """Docker Compose generation agent."""
 
 from jinja2 import Template
+from pydantic import BaseModel, Field
 from pydantic_ai import Agent
 
-from wunderunner.agents.tools import AgentDeps, register_tools
 from wunderunner.settings import Generation, get_model
 
+
+class ComposeResult(BaseModel):
+    """Result of docker-compose.yaml generation."""
+
+    compose_yaml: str = Field(
+        description="The complete docker-compose.yaml content. Must be valid YAML. "
+        "Start with 'services:' - no version needed for modern Docker Compose."
+    )
+
+
 USER_PROMPT = Template("""\
-<project_analysis>
-{{ analysis | tojson(indent=2) }}
-</project_analysis>
+<project>
+Runtime: {{ analysis.project_structure.runtime }}
+Framework: {{ analysis.project_structure.framework or 'none' }}
+Port: {{ analysis.project_structure.port or 3000 }}
+</project>
 
 <dockerfile>
 {{ dockerfile }}
 </dockerfile>
 
-{% if secrets %}
-<required_secrets>
-The following secrets must be passed via build args and environment:
-{% for secret in secrets %}
-- {{ secret.name }}{% if secret.service %} ({{ secret.service }}){% endif %}
-
-{% endfor %}
-Add build args and environment for each:
-```yaml
-services:
-  app:
-    build:
-      args:
-{% for secret in secrets %}
-        - {{ secret.name }}
-{% endfor %}
-    environment:
-{% for secret in secrets %}
-      - {{ secret.name }}
-{% endfor %}
-```
-</required_secrets>
-{% endif %}
-
 {% if learnings %}
-<previous_learnings>
+<previous_errors>
 {% for learning in learnings %}
-- [{{ learning.phase }}] {{ learning.error_type }}: {{ learning.error_message }}
-{%- if learning.context %}
-  Context: {{ learning.context }}
-{%- endif %}
+- [{{ learning.phase }}] {{ learning.error_message }}
 {% endfor %}
-</previous_learnings>
+</previous_errors>
 {% endif %}
 
 {% if existing_compose %}
-<existing_compose>
+<current_compose>
 {{ existing_compose }}
-</existing_compose>
-Refine the above docker-compose.yaml to fix the issues.
+</current_compose>
+Fix the errors and return improved docker-compose.yaml.
 {% else %}
-Generate a new docker-compose.yaml for this project.
+Generate a minimal docker-compose.yaml for this project.
 {% endif %}
-
-{% if hints %}
-<user_hints>
-{% for hint in hints %}
-- {{ hint }}
-{% endfor %}
-</user_hints>
-{% endif %}\
 """)
 
 SYSTEM_PROMPT = """\
-<task>
-Generate or refine a docker-compose.yaml file for a DEVELOPMENT environment. You will receive:
-- Project analysis (runtime, framework, services needed)
-- The Dockerfile being used
-- Previous learnings from failed starts (if any)
-- User hints (if any)
-- Existing docker-compose.yaml to refine (if any)
+Generate a docker-compose.yaml file. Keep it minimal.
 
-This is for local development, not production. Include volume mounts for live reload.
-Your output must be valid YAML for docker-compose v3.8+ format.
-</task>
+RULES:
+1. Start with "services:" (no version declaration needed)
+2. Match the port from the Dockerfile's EXPOSE
+3. Use "build: ." to build from the Dockerfile
+4. NEVER add volumes - no volumes section, no volume mounts
+5. Do NOT add databases unless explicitly needed
+6. Do NOT add health checks unless the app has a /health endpoint
 
-<core_principles>
-- SIMPLE: Minimal services needed. Don't add unnecessary databases or caches.
-- CORRECT: The compose file must work with the provided Dockerfile.
-- ITERATIVE: When refining, preserve what works and fix what failed.
-- EXPLICIT: Be clear about ports, volumes, and environment variables.
-</core_principles>
-
-<compose_structure>
-A minimal docker-compose.yaml:
-
-```yaml
+MINIMAL TEMPLATE:
 services:
   app:
     build: .
     ports:
       - "3000:3000"
-```
 
-With a database (only if needed):
-
-```yaml
-services:
-  app:
-    build: .
-    ports:
-      - "3000:3000"
-    depends_on:
-      - db
-
-  db:
-    image: postgres:15-alpine
-    environment:
-      POSTGRES_USER: app
-      POSTGRES_PASSWORD: password
-      POSTGRES_DB: app
-```
-</compose_structure>
-
-<service_detection>
-Based on the analysis, add supporting services:
-
-**Databases:**
-- PostgreSQL: If env vars contain DATABASE_URL, POSTGRES_*, or pg/psycopg in deps
-- MySQL: If env vars contain MYSQL_*, or mysql in deps
-- MongoDB: If env vars contain MONGO_*, MONGODB_*, or mongoose in deps
-- Redis: If env vars contain REDIS_*, or redis/ioredis in deps
-
-**Message Queues:**
-- RabbitMQ: If env vars contain RABBITMQ_*, AMQP_*, or amqplib in deps
-- Kafka: If kafka* in deps
-
-**Search:**
-- Elasticsearch: If elastic* in deps or ELASTICSEARCH_* env vars
-</service_detection>
-
-<port_mapping>
-Common default ports:
-- Node.js: 3000
-- Python (FastAPI/Flask): 8000
-- Django: 8000
-- Go: 8080
-- Rust: 8080
-- Next.js: 3000
-- Vite: 5173
-- Ruby/Rails: 3000
-
-Use the port from:
-1. PORT env var if specified
-2. EXPOSE in Dockerfile
-3. Common defaults above
-</port_mapping>
-
-<environment_variables>
-Pass environment variables to the container:
-
-For secrets (secret=True in analysis):
-```yaml
-environment:
-  - DATABASE_URL  # Value passed at runtime via .env
-```
-
-For non-secrets with defaults:
-```yaml
-environment:
-  - PORT=3000
-```
-</environment_variables>
-
-<volumes>
-Only use volumes for database persistence. Do not add volume mounts for the app service.
-</volumes>
-
-<healthchecks>
-Add healthchecks for reliability:
-
-```yaml
-healthcheck:
-  test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
-  interval: 30s
-  timeout: 10s
-  retries: 3
-  start_period: 40s
-```
-
-For databases:
-```yaml
-healthcheck:
-  test: ["CMD-SHELL", "pg_isready -U $POSTGRES_USER"]
-  interval: 5s
-  timeout: 5s
-  retries: 5
-```
-</healthchecks>
-
-<depends_on>
-Use depends_on with conditions for proper startup order:
-
-```yaml
-depends_on:
-  db:
-    condition: service_healthy
-```
-</depends_on>
-
-<error_recovery>
-When you receive learnings from failed starts:
-
-1. READ THE ERROR CAREFULLY
-2. Common issues:
-   - Port already in use → Change the host port mapping
-   - Container exit immediately → Check CMD in Dockerfile
-   - Database connection refused → Add depends_on with health check
-   - Permission denied → Check volume mount permissions
-   - Environment variable missing → Add to environment section
-</error_recovery>
-
-<output_format>
-Return ONLY the docker-compose.yaml content as a string. No markdown, no explanation.
-Just the raw YAML content starting with "version:".
-</output_format>
+That's it. Only add more if the project actually needs it.
+NEVER add volumes. Volumes cause mount conflicts with Dockerfile operations.
 """
 
 agent = Agent(
     model=get_model(Generation.COMPOSE),
-    output_type=str,
-    deps_type=AgentDeps,
+    output_type=ComposeResult,
     system_prompt=SYSTEM_PROMPT,
     defer_model_check=True,
 )
 
-register_tools(agent)
+# No tools needed - this agent has all info from the prompt (Dockerfile, analysis, errors)

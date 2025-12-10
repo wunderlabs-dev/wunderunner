@@ -12,10 +12,8 @@ import httpx
 from docker.errors import NotFound
 
 from wunderunner.agents.generation import compose as compose_agent
-from wunderunner.agents.tools import AgentDeps
 from wunderunner.exceptions import HealthcheckError, ServicesError, StartError
 from wunderunner.models.analysis import Analysis
-from wunderunner.models.generation import strip_markdown_fences
 from wunderunner.settings import Generation, get_fallback_model
 from wunderunner.workflows.state import Learning
 
@@ -61,15 +59,12 @@ async def generate(
         existing_compose=existing,
     )
 
-    deps = AgentDeps(project_dir=project_path) if project_path else None
-
     try:
         result = await compose_agent.agent.run(
             prompt,
             model=get_fallback_model(Generation.COMPOSE),
-            deps=deps,
         )
-        return strip_markdown_fences(result.output)
+        return result.output.compose_yaml
     except Exception as e:
         raise ServicesError(f"Failed to generate docker-compose.yaml: {e}") from e
 
@@ -90,6 +85,26 @@ async def start(path: Path) -> list[str]:
 
     if not compose_path.exists():
         raise StartError("docker-compose.yaml not found. Run generate first.")
+
+    # First, stop and remove any existing containers/volumes to avoid mount conflicts
+    # This cleans up corrupted volumes from previous failed attempts
+    down_cmd = [
+        "docker",
+        "compose",
+        "-f",
+        str(compose_path),
+        "down",
+        "-v",  # Remove volumes
+        "--remove-orphans",
+    ]
+
+    down_process = await asyncio.create_subprocess_exec(
+        *down_cmd,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+        cwd=str(path),
+    )
+    await down_process.communicate()  # Ignore errors - may not exist yet
 
     # docker compose CLI is the standard way to orchestrate
     cmd = [
@@ -245,8 +260,13 @@ async def healthcheck(container_ids: list[str], timeout: int = 60) -> None:
                 try:
                     response = await http_client.get(url)
                     if response.status_code >= 500:
-                        all_healthy = False
+                        # App is running but returning errors - fail immediately
+                        all_logs = _get_all_container_logs(client, container_ids)
+                        raise HealthcheckError(
+                            f"HTTP {response.status_code} from {url}\n\n{all_logs}"
+                        )
                 except httpx.RequestError:
+                    # Connection refused, etc - app not ready yet, keep trying
                     all_healthy = False
 
             if all_healthy:

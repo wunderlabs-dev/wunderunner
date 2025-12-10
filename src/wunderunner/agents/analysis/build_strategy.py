@@ -109,23 +109,29 @@ Don't recommend multi-stage when:
 - Build process is simple enough that complexity isn't worth it
 </multi_stage_recommendation>
 
-<common_build_commands>
-Node.js:
-- build: "npm run build", "yarn build", "pnpm build"
-- start: "npm start", "node dist/index.js", "node .next/standalone/server.js"
+<common_start_commands>
+We are building DEVELOPMENT containers. Prefer dev/watch commands over production commands.
+
+Node.js (prefer dev mode):
+- Next.js: "npm run dev" (NOT "npm start" which requires a build)
+- Vite: "npm run dev"
+- Express/Node: "npm run dev" if available, else "node index.js"
+- Generic: Check for "dev" script first, fall back to "start"
 
 Python:
-- build: Usually none, or "uv sync", "pip install -e ."
-- start: "python main.py", "uvicorn app:app", "gunicorn app:app"
+- FastAPI/Uvicorn: "uvicorn app:app --reload"
+- Flask: "flask run --reload"
+- Django: "python manage.py runserver"
 
 Go:
-- build: "go build -o app .", "go build -o app ./cmd/server"
-- start: "./app"
+- "go run ." or "air" for hot reload
 
 Rust:
-- build: "cargo build --release"
-- start: "./target/release/app"
-</common_build_commands>
+- "cargo run" or "cargo watch -x run"
+
+IMPORTANT: For Next.js specifically, ALWAYS use "npm run dev" because "npm start"
+requires a production build (.next directory) which we don't create in dev containers.
+</common_start_commands>
 
 <output_fields>
 monorepo: Boolean - true if this is a monorepo with workspaces

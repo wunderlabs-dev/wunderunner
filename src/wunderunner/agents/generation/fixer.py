@@ -1,4 +1,4 @@
-"""Project fixer agent - can modify project files to fix issues."""
+"""Diagnostic agent - analyzes errors without modifying project files."""
 
 import logging
 
@@ -21,7 +21,7 @@ Phase: {{ phase }}
 Error: {{ error_type }}
 Message: {{ error_message }}
 {% if context %}
-Context: {{ context }}
+{{ context }}
 {% endif %}
 </error>
 
@@ -35,97 +35,81 @@ Context: {{ context }}
 </docker_compose>
 {% endif %}
 
-FOCUS ON THE ACTUAL ERROR MESSAGE. Read it carefully before doing anything.
+Analyze the error and determine:
+1. What is the root cause?
+2. Is this a Dockerfile issue or a project file issue?
+3. What specific change would fix it?
 
-Common patterns:
-- "Failed to resolve X" or "Cannot find module X" = missing dependency, add to package.json
-- "Module not found: X" = missing dependency or wrong import path
-- "command not found: X" = missing script in package.json
-- "ENOENT: no such file or directory" = missing file that needs to be created
-
-Based on the error above, determine if the issue can be fixed by modifying project files.
-If you can fix it, make the changes. If not, explain why.
+Be concise and specific. The diagnosis will be passed to the Dockerfile generation agent.
 """)
 
 SYSTEM_PROMPT = """\
 <task>
-You are a project fixer agent. When containerization fails (build error, start error, etc.),
-you investigate the root cause and fix project files if needed.
+You are a diagnostic agent. When containerization fails (build error, start error, etc.),
+you investigate the root cause and provide a diagnosis.
 
-You have tools to:
+You have read-only tools to:
 - read_file: Read any project file
 - list_dir: List directory contents
 - grep: Search for patterns
 - glob: Find files by pattern
-- write_file: Create new files or overwrite existing ones
-- edit_file: Replace old_string with new_string in a file (for surgical edits)
 
-Your goal is to fix the PROJECT FILES (not Dockerfile) when the issue is in the project itself.
+Your goal is to DIAGNOSE issues, not fix them. Your diagnosis will be passed to the
+Dockerfile generation agent which will decide how to address the issue.
 </task>
 
-<when_to_fix>
-Fix project files when:
-- Missing required files (e.g., .env.example, config files)
-- Wrong file permissions
-- Missing scripts in package.json
-- Missing dependencies that should be added
-- Incorrect configuration
+<diagnosis_approach>
+1. Read the error message carefully - it often contains the answer
+2. Look at relevant project files to understand the context
+3. Determine if the issue is:
+   - Dockerfile issue: missing build step, wrong base image, incorrect paths, etc.
+   - Project issue: misconfiguration that can't be fixed by Dockerfile changes
 
-Do NOT fix:
-- Issues that should be fixed in Dockerfile
-- Issues requiring major code refactoring
-- Security vulnerabilities (report them instead)
-</when_to_fix>
+4. Provide a specific, actionable diagnosis
+</diagnosis_approach>
 
-<common_fixes>
-1. Missing start script in package.json:
-   - Add "start": "node dist/index.js" or similar
+<common_patterns>
+Build failures:
+- "Module not found" during build = missing dependency install step
+- "Cannot find module X" at runtime = dependency not in production bundle
+- "ENOENT: no such file" = wrong WORKDIR or COPY path
 
-2. Missing .env.example:
-   - Create from detected env vars
+Start failures:
+- "Could not find production build" = missing build step in Dockerfile
+- "command not found" = wrong CMD or missing binary
 
-3. Missing health check endpoint:
-   - Add /health route returning 200 OK
+Health check failures:
+- Timeout = slow startup, increase health check start_period
+- Connection refused = wrong port or app not binding to 0.0.0.0
+- 500 errors = app starting but crashing, check logs for root cause
+</common_patterns>
 
-4. Wrong entry point path:
-   - Check and fix main/bin in package.json
-   - Check pyproject.toml scripts
-
-5. Missing configuration:
-   - Create default config files
-</common_fixes>
-
-<output_format>
-Return a FixResult with:
-- fixed: true if you made changes, false if no fix was possible/needed
-- changes: list of files modified (empty if fixed=false)
-- explanation: what you did or why you couldn't fix it
-</output_format>
-
-<safety>
-NEVER:
-- Delete files without explicit confirmation
-- Modify sensitive files (.env with real secrets, credentials)
-- Make changes outside the project directory
-- Add malicious code
-</safety>
+<output>
+Return a Diagnosis with:
+- root_cause: What specifically caused the error (1-2 sentences)
+- is_dockerfile_issue: true if Dockerfile changes can fix it, false if project needs changes
+- suggested_fix: Specific change needed (e.g., "Add RUN npm run build before CMD")
+- confidence: 0-10 how confident you are in this diagnosis
+</output>
 """
 
 
-class FixResult(BaseModel):
-    """Result of a fix attempt."""
+class Diagnosis(BaseModel):
+    """Result of error diagnosis."""
 
-    fixed: bool
-    changes: list[str]
-    explanation: str
+    root_cause: str
+    is_dockerfile_issue: bool
+    suggested_fix: str
+    confidence: int
 
 
 agent = Agent(
-    model=get_model(Generation.DOCKERFILE),  # Use same model as dockerfile gen
-    output_type=FixResult,
+    model=get_model(Generation.DOCKERFILE),
+    output_type=Diagnosis,
     deps_type=AgentDeps,
     system_prompt=SYSTEM_PROMPT,
     defer_model_check=True,
 )
 
-register_tools(agent, include_write=True)
+# Read-only tools - no write_file or edit_file
+register_tools(agent, include_write=False)

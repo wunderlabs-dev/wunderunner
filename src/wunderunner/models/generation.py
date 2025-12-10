@@ -36,3 +36,28 @@ class DockerfileResult(BaseModel):
     def strip_fences(cls, v: str) -> str:
         """Strip markdown code fences if the model included them."""
         return strip_markdown_fences(v)
+
+
+class ImprovementResult(BaseModel):
+    """Result of Dockerfile improvement after build/runtime failure."""
+
+    dockerfile: str = Field(description="The improved Dockerfile content")
+    confidence: int = Field(
+        ge=0,
+        le=10,
+        description="Confidence score 0-10. 9-10 for proven patterns, 5-8 for reasonable "
+        "solutions, 1-4 for uncertain fixes, 0 for blind guesses.",
+    )
+    reasoning: str = Field(
+        description="What error was fixed, what changes were made, and why this fixes it"
+    )
+    files_modified: list[str] = Field(
+        default_factory=list,
+        description="List of project files modified using write_file tool",
+    )
+
+    @field_validator("dockerfile", mode="after")
+    @classmethod
+    def strip_fences(cls, v: str) -> str:
+        """Strip markdown code fences if the model included them."""
+        return strip_markdown_fences(v)

@@ -265,9 +265,8 @@ class Healthcheck(BaseNode[ContainerizeState]):
             return End(Success())
         except HealthcheckError as e:
             progress(Severity.ERROR, "Health check failed")
-            # Increase timeout for next attempt if this was a timeout
-            if "timed out" in str(e):
-                ctx.state.healthcheck_timeout = min(timeout + 60, 300)  # Cap at 5 min
+            # Don't increase timeout - if it times out, the app is likely broken
+            # Increasing just wastes time. Keep fixed at 60s.
             learning = Learning(
                 phase=Phase.HEALTHCHECK,
                 error_type=type(e).__name__,
@@ -279,11 +278,11 @@ class Healthcheck(BaseNode[ContainerizeState]):
 
 @dataclass
 class RetryOrHint(BaseNode[ContainerizeState]):
-    """Decision: try fixer, auto-retry, or ask human for hint."""
+    """Decision: improve Dockerfile, auto-retry, or ask human for hint."""
 
     learning: Learning
 
-    async def run(self, ctx: Ctx) -> FixProject | Dockerfile | HumanHint:
+    async def run(self, ctx: Ctx) -> ImproveDockerfile | Dockerfile | HumanHint:
         progress = ctx.state.on_progress
         settings = get_settings()
         ctx.state.retry_count += 1
@@ -292,11 +291,13 @@ class RetryOrHint(BaseNode[ContainerizeState]):
         if ctx.state.retry_count >= settings.max_attempts:
             return HumanHint()
 
-        # For runtime errors (build/start/healthcheck), try fixing project first
+        # For runtime errors (build/start/healthcheck), use improvement agent
+        # which can fix both Dockerfile AND project files
         runtime_phases = {Phase.BUILD, Phase.START, Phase.HEALTHCHECK}
         if self.learning.phase in runtime_phases:
-            return FixProject(learning=self.learning)
+            return ImproveDockerfile(learning=self.learning)
 
+        # For validation/generation errors, just retry Dockerfile generation
         remaining = settings.max_attempts - ctx.state.retry_count
         progress(Severity.INFO, f"Retrying... ({remaining} attempts remaining)")
         return Dockerfile()
@@ -325,46 +326,76 @@ class HumanHint(BaseNode[ContainerizeState]):
 
 
 @dataclass
-class FixProject(BaseNode[ContainerizeState]):
-    """Attempt to fix project files based on runtime errors."""
+class ImproveDockerfile(BaseNode[ContainerizeState]):
+    """Improve Dockerfile after build/runtime errors.
+
+    This unified agent can fix both Dockerfile issues AND project configuration
+    issues (like removing problematic .babelrc files).
+    """
 
     learning: Learning
 
-    async def run(self, ctx: Ctx) -> Dockerfile:
+    async def run(self, ctx: Ctx) -> Validate | Build | HumanHint:
         progress = ctx.state.on_progress
         settings = get_settings()
 
-        progress(Severity.INFO, "Attempting to fix project files...")
+        progress(Severity.INFO, "Analyzing and fixing error...")
 
-        fix_result = await fixer.fix_project(
+        improvement = await fixer.improve_dockerfile(
             learning=self.learning,
             analysis=ctx.state.analysis,
             dockerfile_content=ctx.state.dockerfile_content,
             compose_content=ctx.state.compose_content,
             project_path=ctx.state.path,
+            attempt_number=ctx.state.retry_count,
         )
 
-        if fix_result.fixed:
-            progress(Severity.SUCCESS, f"Project fixed: {fix_result.explanation}")
-            for change in fix_result.changes:
-                progress(Severity.INFO, f"  Modified: {change}")
-            # Reset retry counter since we made progress
-            ctx.state.retry_count = 0
-        else:
-            # Fixer couldn't help - record as learning (it often contains root cause analysis)
-            progress(Severity.INFO, f"Not a project file issue: {fix_result.explanation}")
-            fixer_learning = Learning(
-                phase=Phase.FIXER,
-                error_type="FixerFailed",
-                error_message=fix_result.explanation,
-                context=f"Original error: {self.learning.error_message}",
-            )
-            ctx.state.learnings.append(fixer_learning)
+        # Update Dockerfile with improvement
+        ctx.state.dockerfile_content = improvement.dockerfile
+        ctx.state.last_confidence = improvement.confidence
 
-        # Always go back to Dockerfile - RetryOrHint will handle max attempts on next failure
+        # Report what was done
+        conf = improvement.confidence
+        if improvement.files_modified:
+            progress(
+                Severity.SUCCESS,
+                f"Fixed (confidence {conf}/10): {improvement.reasoning}",
+            )
+            for f in improvement.files_modified:
+                progress(Severity.INFO, f"  Modified: {f}")
+
+            # If compose was modified, skip Services regeneration
+            compose_modified = any(
+                "docker-compose" in f or "compose.yaml" in f or "compose.yml" in f
+                for f in improvement.files_modified
+            )
+            if compose_modified:
+                ctx.state.skip_services_regen = True
+        else:
+            progress(
+                Severity.INFO,
+                f"Improved Dockerfile (confidence {conf}/10): {improvement.reasoning}",
+            )
+
         remaining = settings.max_attempts - ctx.state.retry_count
-        progress(Severity.INFO, f"Retrying Dockerfile... ({remaining} attempts remaining)")
-        return Dockerfile()
+
+        # If confidence is very low AND we're out of retries, ask human
+        # Otherwise, try the build anyway - the fix might work
+        if conf <= 2 and remaining <= 1:
+            progress(Severity.WARNING, "Low confidence and out of retries - requesting help")
+            return HumanHint()
+
+        if conf <= 2:
+            progress(Severity.WARNING, f"Low confidence fix, trying anyway... ({remaining} left)")
+        else:
+            progress(Severity.INFO, f"Retrying build... ({remaining} attempts remaining)")
+
+        # If we modified compose, go directly to Build (skip Validate and Services)
+        if ctx.state.skip_services_regen:
+            ctx.state.skip_services_regen = False  # Reset for next iteration
+            return Build()
+
+        return Validate()
 
 
 containerize_graph = Graph(
@@ -379,7 +410,7 @@ containerize_graph = Graph(
         Healthcheck,
         RetryOrHint,
         HumanHint,
-        FixProject,
+        ImproveDockerfile,
     ],
     state_type=ContainerizeState,
     run_end_type=Success,

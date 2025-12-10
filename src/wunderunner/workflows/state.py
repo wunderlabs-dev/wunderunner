@@ -98,5 +98,8 @@ class ContainerizeState:
     # Conversation history for stateful Dockerfile generation
     dockerfile_messages: list[Any] = field(default_factory=list)
 
-    # Healthcheck timeout tracking (increases on timeout failures)
+    # Healthcheck timeout (fixed - increasing wastes time on broken apps)
     healthcheck_timeout: int = 60
+
+    # Skip services regeneration flag (set by ImproveDockerfile when it fixes compose)
+    skip_services_regen: bool = False

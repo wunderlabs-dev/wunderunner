@@ -159,11 +159,14 @@ def get_runtime_template(runtime: str, analysis: dict) -> str:
     project = analysis.get("project_structure", {})
     build = analysis.get("build_strategy", {})
 
+    # Default to dev command for dev containers (npm run dev, not npm start)
+    start_command = build.get("start_command") or '["npm", "run", "dev"]'
+
     return template.render(
         version=project.get("runtime_version", "20"),
         lockfile=build.get("lockfile"),
         package_manager=build.get("package_manager", "npm"),
-        start_command=build.get("start_command", '["npm", "start"]'),
+        start_command=start_command,
         port=project.get("port", 3000),
         binary_name=project.get("name", "app"),
     )

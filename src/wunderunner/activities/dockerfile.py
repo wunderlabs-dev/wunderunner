@@ -24,6 +24,40 @@ logger = logging.getLogger(__name__)
 USAGE_LIMITS = UsageLimits(tool_calls_limit=5)
 
 
+def _get_default_start_command(runtime: str, framework: str | None) -> str:
+    """Get default start command for dev containers.
+
+    Development containers should use dev/watch commands, not production start.
+    """
+    if runtime == "node":
+        # Next.js specifically needs dev mode - npm start requires a build
+        if framework and framework.lower() in ("nextjs", "next"):
+            return '["npm", "run", "dev"]'
+        # Vite, Remix, etc. also prefer dev mode
+        if framework and framework.lower() in ("vite", "remix"):
+            return '["npm", "run", "dev"]'
+        # Default Node.js to dev mode - most projects have a dev script
+        return '["npm", "run", "dev"]'
+
+    if runtime == "python":
+        if framework and framework.lower() == "fastapi":
+            return '["uvicorn", "app:app", "--reload", "--host", "0.0.0.0"]'
+        if framework and framework.lower() == "flask":
+            return '["flask", "run", "--reload", "--host", "0.0.0.0"]'
+        if framework and framework.lower() == "django":
+            return '["python", "manage.py", "runserver", "0.0.0.0:8000"]'
+        return '["python", "-m", "app"]'
+
+    if runtime == "go":
+        return '["go", "run", "."]'
+
+    if runtime == "rust":
+        return '["cargo", "run"]'
+
+    # Fallback
+    return '["npm", "run", "dev"]'
+
+
 @dataclass
 class GenerateResult:
     """Result of Dockerfile generation including conversation history."""
@@ -71,12 +105,17 @@ async def generate(
     runtime = project.get("runtime", "node")
     runtime_template = dockerfile_agent.get_runtime_template(runtime, analysis_dict)
 
+    # For dev containers, prefer dev commands over production commands
+    framework = project.get("framework")
+    default_start = _get_default_start_command(runtime, framework)
+    start_command = build.get("start_command") or default_start
+
     prompt = dockerfile_agent.USER_PROMPT.render(
         runtime=runtime,
-        framework=project.get("framework"),
+        framework=framework,
         package_manager=build.get("package_manager", "npm"),
         lockfile=build.get("lockfile"),
-        start_command=build.get("start_command", '["npm", "start"]'),
+        start_command=start_command,
         port=project.get("port", 3000),
         runtime_template=runtime_template,
         secrets=secrets,
