@@ -10,6 +10,8 @@ from pathlib import Path
 
 from pydantic_ai import Agent, RunContext
 
+from wunderunner.settings import get_settings
+
 logger = logging.getLogger(__name__)
 
 
@@ -21,29 +23,31 @@ class AgentDeps:
     max_file_size: int = 15_000  # ~15KB, roughly 3-4K tokens
 
 
-# Directories to skip during recursive file operations
-SKIP_DIRS = frozenset({
-    ".git",
-    ".svn",
-    ".hg",
-    ".wunderunner",  # Our internal work directory
-    "node_modules",
-    ".venv",
-    "venv",
-    "__pycache__",
-    ".pytest_cache",
-    ".mypy_cache",
-    ".ruff_cache",
-    ".tox",
-    "dist",
-    "build",
-    ".next",
-    ".nuxt",
-    ".output",
-    "coverage",
-    ".turbo",
-    ".cache",
-})
+def _get_skip_dirs() -> frozenset[str]:
+    """Get directories to skip, including our cache dir from settings."""
+    settings = get_settings()
+    return frozenset({
+        ".git",
+        ".svn",
+        ".hg",
+        settings.cache_dir,  # Our internal work directory
+        "node_modules",
+        ".venv",
+        "venv",
+        "__pycache__",
+        ".pytest_cache",
+        ".mypy_cache",
+        ".ruff_cache",
+        ".tox",
+        "dist",
+        "build",
+        ".next",
+        ".nuxt",
+        ".output",
+        "coverage",
+        ".turbo",
+        ".cache",
+    })
 
 # File extensions to skip (binary/generated)
 SKIP_EXTENSIONS = frozenset({
@@ -83,15 +87,17 @@ def _validate_path(deps: AgentDeps, relative_path: str) -> Path:
         raise ValueError(f"Path escapes project directory: {relative_path}")
 
     # Block access to internal work directory
+    settings = get_settings()
     parts = Path(relative_path).parts
-    if parts and parts[0] == ".wunderunner":
-        raise ValueError("Cannot access .wunderunner directory")
+    if parts and parts[0] == settings.cache_dir:
+        raise ValueError(f"Cannot access {settings.cache_dir} directory")
 
     return full_path
 
 
 def _iter_files(root: Path, max_files: int = 5000) -> list[Path]:
     """Iterate files, skipping heavy directories and binary files."""
+    skip_dirs = _get_skip_dirs()
     files = []
     count = 0
 
@@ -109,7 +115,7 @@ def _iter_files(root: Path, max_files: int = 5000) -> list[Path]:
             if count >= max_files:
                 return
 
-            if entry.is_dir() and entry.name not in SKIP_DIRS:
+            if entry.is_dir() and entry.name not in skip_dirs:
                 walk(entry)
             elif entry.is_file() and entry.suffix.lower() not in SKIP_EXTENSIONS:
                 files.append(entry)
