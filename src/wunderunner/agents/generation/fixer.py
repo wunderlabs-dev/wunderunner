@@ -6,7 +6,7 @@ from jinja2 import Template
 from pydantic import BaseModel
 from pydantic_ai import Agent
 
-from wunderunner.agents.tools import AgentDeps, register_tools, register_write_tools
+from wunderunner.agents.tools import AgentDeps, register_tools
 from wunderunner.settings import Generation, get_model
 
 logger = logging.getLogger(__name__)
@@ -116,6 +116,4 @@ agent = Agent(
     defer_model_check=True,
 )
 
-# Register all tools (read + write)
-register_tools(agent)
-register_write_tools(agent)
+register_tools(agent, include_write=True)

@@ -272,15 +272,12 @@ async def write_file(ctx: RunContext[AgentDeps], path: str, content: str) -> str
         return f"Error writing file: {e}"
 
 
-def register_tools(agent: Agent[AgentDeps, object]) -> None:
-    """Register read-only filesystem tools on an agent."""
+def register_tools(agent: Agent[AgentDeps, object], include_write: bool = False) -> None:
+    """Register filesystem tools on an agent."""
     agent.tool(read_file)
     agent.tool(list_dir)
     agent.tool(glob)
     agent.tool(grep)
     agent.tool(file_stats)
-
-
-def register_write_tools(agent: Agent[AgentDeps, object]) -> None:
-    """Register write tools on an agent. Use with caution."""
-    agent.tool(write_file)
+    if include_write:
+        agent.tool(write_file)
