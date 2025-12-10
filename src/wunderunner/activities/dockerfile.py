@@ -75,7 +75,6 @@ async def generate(
         framework=project.get("framework"),
         package_manager=build.get("package_manager", "npm"),
         lockfile=build.get("lockfile"),
-        build_command=build.get("build_command"),
         start_command=build.get("start_command", '["npm", "start"]'),
         port=project.get("port", 3000),
         runtime_template=runtime_template,

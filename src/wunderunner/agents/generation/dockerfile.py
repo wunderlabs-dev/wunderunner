@@ -8,6 +8,7 @@ from wunderunner.models.generation import DockerfileResult
 from wunderunner.settings import Generation, get_model
 
 # Runtime-specific templates for development containers
+# No build steps - dev servers handle compilation on the fly
 RUNTIME_TEMPLATES = {
     "node": """\
 # Node.js development container
@@ -16,9 +17,6 @@ WORKDIR /app
 COPY package.json {% if lockfile %}{{ lockfile }} {% endif %}./
 RUN npm install
 COPY . .
-{% if build_command %}
-RUN {{ build_command }}
-{% endif %}
 EXPOSE {{ port }}
 CMD {{ start_command }}
 """,
@@ -50,9 +48,8 @@ WORKDIR /app
 COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
-RUN go build -o main .
 EXPOSE {{ port }}
-CMD ["./main"]
+CMD {{ start_command }}
 """,
     "rust": """\
 # Rust development container
@@ -60,9 +57,8 @@ FROM rust:{{ version }}
 WORKDIR /app
 COPY Cargo.toml Cargo.lock ./
 COPY src ./src
-RUN cargo build
 EXPOSE {{ port }}
-CMD ["./target/debug/{{ binary_name }}"]
+CMD {{ start_command }}
 """,
 }
 
@@ -72,7 +68,6 @@ Runtime: {{ runtime }}
 {% if framework %}Framework: {{ framework }}{% endif %}
 Package manager: {{ package_manager }}
 {% if lockfile %}Lockfile: {{ lockfile }}{% endif %}
-{% if build_command %}Build: {{ build_command }}{% endif %}
 Start: {{ start_command }}
 Port: {{ port }}
 </project>
@@ -168,7 +163,6 @@ def get_runtime_template(runtime: str, analysis: dict) -> str:
         version=project.get("runtime_version", "20"),
         lockfile=build.get("lockfile"),
         package_manager=build.get("package_manager", "npm"),
-        build_command=build.get("build_command"),
         start_command=build.get("start_command", '["npm", "start"]'),
         port=project.get("port", 3000),
         binary_name=project.get("name", "app"),
