@@ -16,6 +16,11 @@ dependencies = [
     "rich>=13.8.0",
 ]
 
+[project.optional-dependencies]
+dev = [
+    "logfire>=3.0.0",
+]
+
 [project.scripts]
 wunderunner = "wunderunner.cli.main:app"
 wxr = "wunderunner.cli.main:app"
