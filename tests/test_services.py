@@ -281,3 +281,34 @@ class TestStart:
         with patch("asyncio.create_subprocess_exec", side_effect=create_subprocess):
             with pytest.raises(StartError, match="No containers started"):
                 await services.start(tmp_path)
+
+
+class TestStop:
+    """Tests for stop function."""
+
+    @pytest.mark.asyncio
+    async def test_happy_path_runs_compose_down(self, tmp_path):
+        """Stop runs docker compose down when file exists."""
+        compose_file = tmp_path / "docker-compose.yaml"
+        compose_file.write_text("version: '3'\nservices:\n  app:\n    image: alpine\n")
+
+        async def create_subprocess(*args, **kwargs):
+            proc = MagicMock()
+            proc.returncode = 0
+            proc.communicate = AsyncMock(return_value=(b"", b""))
+            return proc
+
+        with patch("asyncio.create_subprocess_exec", side_effect=create_subprocess) as mock_exec:
+            await services.stop(tmp_path)
+            mock_exec.assert_called_once()
+            # Verify docker compose down was called
+            call_args = mock_exec.call_args[0]
+            assert "docker" in call_args
+            assert "down" in call_args
+
+    @pytest.mark.asyncio
+    async def test_no_compose_file_returns_early(self, tmp_path):
+        """Stop returns early when no compose file exists."""
+        with patch("asyncio.create_subprocess_exec") as mock_exec:
+            await services.stop(tmp_path)
+            mock_exec.assert_not_called()
