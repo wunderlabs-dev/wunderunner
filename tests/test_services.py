@@ -126,3 +126,27 @@ class TestHealthcheck:
 
             with pytest.raises(HealthcheckError, match="timed out.*HTTP"):
                 await services.healthcheck(["abc123"], timeout=1)
+
+    @pytest.mark.asyncio
+    async def test_http_500_error_fails_immediately(self, mock_container):
+        """Healthcheck fails immediately on HTTP 500."""
+        container = mock_container(
+            status="running",
+            ports={"8000/tcp": [{"HostPort": "8000"}]},
+        )
+        mock_client = MagicMock()
+        mock_client.containers.get.return_value = container
+
+        mock_response = MagicMock()
+        mock_response.status_code = 500
+
+        with (
+            patch("wunderunner.activities.services.get_client", return_value=mock_client),
+            patch("httpx.AsyncClient") as mock_httpx,
+        ):
+            mock_httpx_instance = AsyncMock()
+            mock_httpx_instance.get.return_value = mock_response
+            mock_httpx.return_value.__aenter__.return_value = mock_httpx_instance
+
+            with pytest.raises(HealthcheckError, match="HTTP 500"):
+                await services.healthcheck(["abc123"], timeout=5)
