@@ -21,7 +21,7 @@ class BuildResult:
     cache_hit: bool
 
 
-def _get_client() -> docker.DockerClient:
+def get_client() -> docker.DockerClient:
     """Get Docker client from environment."""
     return docker.from_env()
 
@@ -70,7 +70,7 @@ async def build(path: Path, dockerfile_content: str) -> BuildResult:
     # Generate stable tag for caching
     tag = _compute_cache_tag(path, dockerfile_content)
 
-    client = _get_client()
+    client = get_client()
 
     # Check if image already exists (cache hit)
     if _image_exists(client, tag):

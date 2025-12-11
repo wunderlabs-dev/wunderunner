@@ -64,53 +64,17 @@ class Context(Enum):
 AgentType = Analysis | Generation | Validation | Context
 
 
-# Model priority list per agent - tried in order until one succeeds
-_MODEL_PRIORITY: dict[AgentType, list[str]] = {
-    # Analysis agents
-    Analysis.PROJECT_STRUCTURE: [
-        "anthropic:claude-sonnet-4-5-20250929",
-        "openai:gpt-4o",
-    ],
-    Analysis.BUILD_STRATEGY: [
-        "anthropic:claude-sonnet-4-5-20250929",
-        "openai:gpt-4o",
-    ],
-    Analysis.ENV_VARS: [
-        "anthropic:claude-sonnet-4-5-20250929",
-        "openai:gpt-4o",
-    ],
-    Analysis.SECRETS: [
-        "anthropic:claude-sonnet-4-5-20250929",
-        "openai:gpt-4o",
-    ],
-    Analysis.CODE_STYLE: [
-        "anthropic:claude-3-5-haiku-20241022",
-        "openai:gpt-4o-mini",
-    ],
-    # Generation agents
-    Generation.DOCKERFILE: [
-        "anthropic:claude-sonnet-4-5-20250929",
-        "openai:gpt-4o",
-    ],
-    Generation.COMPOSE: [
-        "anthropic:claude-sonnet-4-5-20250929",
-        "openai:gpt-4o",
-    ],
-    # Validation agents
-    Validation.DOCKERFILE: [
-        "anthropic:claude-sonnet-4-5-20250929",
-        "openai:gpt-4o",
-    ],
-    Validation.COMPOSE: [
-        "anthropic:claude-sonnet-4-5-20250929",
-        "openai:gpt-4o",
-    ],
-    # Context agents (use cheaper models for summarization)
-    Context.SUMMARIZER: [
-        "anthropic:claude-3-5-haiku-20241022",
-        "openai:gpt-4o-mini",
-    ],
-}
+# Model tiers - most agents use standard, some use fast for cheaper tasks
+_STANDARD_MODELS = ["anthropic:claude-sonnet-4-5-20250929", "openai:gpt-4o"]
+_FAST_MODELS = ["anthropic:claude-3-5-haiku-20241022", "openai:gpt-4o-mini"]
+
+# Agents that use fast (cheaper) models
+_FAST_AGENTS: set[AgentType] = {Analysis.CODE_STYLE, Context.SUMMARIZER}
+
+
+def _get_model_priority(agent: AgentType) -> list[str]:
+    """Get model priority list for an agent."""
+    return _FAST_MODELS if agent in _FAST_AGENTS else _STANDARD_MODELS
 
 
 class NoAPIKeyError(Exception):
@@ -147,13 +111,9 @@ def get_model(agent: AgentType) -> str:
 
     Raises:
         NoAPIKeyError: If no API keys are configured
-        ValueError: If agent type is unknown
     """
-    if agent not in _MODEL_PRIORITY:
-        raise ValueError(f"Unknown agent type: {agent}")
-
     # Return first model - agent uses defer_model_check=True so validation happens at runtime
-    return _MODEL_PRIORITY[agent][0]
+    return _get_model_priority(agent)[0]
 
 
 def _create_model(model_str: str):
@@ -199,15 +159,12 @@ def get_fallback_model(agent: AgentType):
     """
     from pydantic_ai.models.fallback import FallbackModel
 
-    if agent not in _MODEL_PRIORITY:
-        raise ValueError(f"Unknown agent type: {agent}")
-
     available_providers = _get_available_providers()
     if not available_providers:
         raise NoAPIKeyError()
 
     # Filter to models we have API keys for
-    priority_list = _MODEL_PRIORITY[agent]
+    priority_list = _get_model_priority(agent)
     available_models = [
         model for model in priority_list if model.split(":")[0] in available_providers
     ]

@@ -276,6 +276,9 @@ class Healthcheck(BaseNode[ContainerizeState]):
             return RetryOrHint(learning=learning)
 
 
+_RUNTIME_PHASES = frozenset({Phase.BUILD, Phase.START, Phase.HEALTHCHECK})
+
+
 @dataclass
 class RetryOrHint(BaseNode[ContainerizeState]):
     """Decision: improve Dockerfile, auto-retry, or ask human for hint."""
@@ -283,23 +286,17 @@ class RetryOrHint(BaseNode[ContainerizeState]):
     learning: Learning
 
     async def run(self, ctx: Ctx) -> ImproveDockerfile | Dockerfile | HumanHint:
-        progress = ctx.state.on_progress
         settings = get_settings()
         ctx.state.retry_count += 1
 
-        # Check if we've exceeded max attempts
         if ctx.state.retry_count >= settings.max_attempts:
             return HumanHint()
 
-        # For runtime errors (build/start/healthcheck), use improvement agent
-        # which can fix both Dockerfile AND project files
-        runtime_phases = {Phase.BUILD, Phase.START, Phase.HEALTHCHECK}
-        if self.learning.phase in runtime_phases:
+        if self.learning.phase in _RUNTIME_PHASES:
             return ImproveDockerfile(learning=self.learning)
 
-        # For validation/generation errors, just retry Dockerfile generation
         remaining = settings.max_attempts - ctx.state.retry_count
-        progress(Severity.INFO, f"Retrying... ({remaining} attempts remaining)")
+        ctx.state.on_progress(Severity.INFO, f"Retrying... ({remaining} attempts remaining)")
         return Dockerfile()
 
 
@@ -325,6 +322,14 @@ class HumanHint(BaseNode[ContainerizeState]):
         return Dockerfile()
 
 
+_COMPOSE_PATTERNS = ("docker-compose", "compose.yaml", "compose.yml")
+
+
+def _is_compose_file(filename: str) -> bool:
+    """Check if a filename is a compose file."""
+    return any(p in filename for p in _COMPOSE_PATTERNS)
+
+
 @dataclass
 class ImproveDockerfile(BaseNode[ContainerizeState]):
     """Improve Dockerfile after build/runtime errors.
@@ -337,10 +342,8 @@ class ImproveDockerfile(BaseNode[ContainerizeState]):
 
     async def run(self, ctx: Ctx) -> Validate | Build | HumanHint:
         progress = ctx.state.on_progress
-        settings = get_settings()
 
         progress(Severity.INFO, "Analyzing and fixing error...")
-
         improvement = await fixer.improve_dockerfile(
             learning=self.learning,
             analysis=ctx.state.analysis,
@@ -350,37 +353,37 @@ class ImproveDockerfile(BaseNode[ContainerizeState]):
             attempt_number=ctx.state.retry_count,
         )
 
-        # Update Dockerfile with improvement
         ctx.state.dockerfile_content = improvement.dockerfile
         ctx.state.last_confidence = improvement.confidence
 
-        # Report what was done
+        self._report_improvement(ctx, improvement)
+
+        return self._decide_next_step(ctx, improvement)
+
+    def _report_improvement(self, ctx: Ctx, improvement) -> None:
+        """Log what the improvement agent did."""
+        progress = ctx.state.on_progress
         conf = improvement.confidence
-        if improvement.files_modified:
-            progress(
-                Severity.SUCCESS,
-                f"Fixed (confidence {conf}/10): {improvement.reasoning}",
-            )
-            for f in improvement.files_modified:
-                progress(Severity.INFO, f"  Modified: {f}")
 
-            # If compose was modified, skip Services regeneration
-            compose_modified = any(
-                "docker-compose" in f or "compose.yaml" in f or "compose.yml" in f
-                for f in improvement.files_modified
-            )
-            if compose_modified:
-                ctx.state.skip_services_regen = True
-        else:
-            progress(
-                Severity.INFO,
-                f"Improved Dockerfile (confidence {conf}/10): {improvement.reasoning}",
-            )
+        if not improvement.files_modified:
+            msg = f"Improved Dockerfile (confidence {conf}/10): {improvement.reasoning}"
+            progress(Severity.INFO, msg)
+            return
 
+        progress(Severity.SUCCESS, f"Fixed (confidence {conf}/10): {improvement.reasoning}")
+        for f in improvement.files_modified:
+            progress(Severity.INFO, f"  Modified: {f}")
+
+        if any(_is_compose_file(f) for f in improvement.files_modified):
+            ctx.state.skip_services_regen = True
+
+    def _decide_next_step(self, ctx: Ctx, improvement) -> Validate | Build | HumanHint:
+        """Decide whether to retry, skip to build, or ask human."""
+        progress = ctx.state.on_progress
+        settings = get_settings()
+        conf = improvement.confidence
         remaining = settings.max_attempts - ctx.state.retry_count
 
-        # If confidence is very low AND we're out of retries, ask human
-        # Otherwise, try the build anyway - the fix might work
         if conf <= 2 and remaining <= 1:
             progress(Severity.WARNING, "Low confidence and out of retries - requesting help")
             return HumanHint()
@@ -390,9 +393,8 @@ class ImproveDockerfile(BaseNode[ContainerizeState]):
         else:
             progress(Severity.INFO, f"Retrying build... ({remaining} attempts remaining)")
 
-        # If we modified compose, go directly to Build (skip Validate and Services)
         if ctx.state.skip_services_regen:
-            ctx.state.skip_services_regen = False  # Reset for next iteration
+            ctx.state.skip_services_regen = False
             return Build()
 
         return Validate()

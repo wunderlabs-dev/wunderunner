@@ -103,30 +103,26 @@ def _validate_path(deps: AgentDeps, relative_path: str) -> Path:
 def _iter_files(root: Path, max_files: int = 5000) -> list[Path]:
     """Iterate files, skipping heavy directories and binary files."""
     skip_dirs = _get_skip_dirs()
-    files = []
-    count = 0
+    files: list[Path] = []
+    dirs_to_visit = [root]
 
-    def walk(directory: Path) -> None:
-        nonlocal count
-        if count >= max_files:
-            return
+    while dirs_to_visit and len(files) < max_files:
+        current = dirs_to_visit.pop()
 
         try:
-            entries = list(directory.iterdir())
+            entries = list(current.iterdir())
         except PermissionError:
-            return
+            continue
 
         for entry in entries:
-            if count >= max_files:
-                return
+            if len(files) >= max_files:
+                break
 
             if entry.is_dir() and entry.name not in skip_dirs:
-                walk(entry)
+                dirs_to_visit.append(entry)
             elif entry.is_file() and entry.suffix.lower() not in SKIP_EXTENSIONS:
                 files.append(entry)
-                count += 1
 
-    walk(root)
     return files
 
 

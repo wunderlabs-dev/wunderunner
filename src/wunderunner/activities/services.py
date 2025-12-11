@@ -11,16 +11,12 @@ import docker
 import httpx
 from docker.errors import NotFound
 
+from wunderunner.activities.docker import get_client
 from wunderunner.agents.generation import compose as compose_agent
 from wunderunner.exceptions import HealthcheckError, ServicesError, StartError
 from wunderunner.models.analysis import Analysis
 from wunderunner.settings import Generation, get_fallback_model
 from wunderunner.workflows.state import Learning
-
-
-def _get_client() -> docker.DockerClient:
-    """Get Docker client from environment."""
-    return docker.from_env()
 
 
 async def generate(
@@ -212,67 +208,112 @@ async def healthcheck(container_ids: list[str], timeout: int = 60) -> None:
     if not container_ids:
         raise HealthcheckError("No containers to check")
 
-    client = _get_client()
+    client = get_client()
     start_time = asyncio.get_event_loop().time()
 
-    # Phase 1: Wait for containers to be running
+    await _wait_for_containers_running(client, container_ids, start_time, timeout)
+    await _wait_for_http_healthy(client, container_ids, start_time, timeout)
+
+
+async def _wait_for_containers_running(
+    client: docker.DockerClient,
+    container_ids: list[str],
+    start_time: float,
+    timeout: int,
+) -> None:
+    """Wait for all containers to reach running state."""
     while True:
-        elapsed = asyncio.get_event_loop().time() - start_time
-        if elapsed > timeout:
-            all_logs = _get_all_container_logs(client, container_ids)
-            raise HealthcheckError(
-                f"Health check timed out after {timeout}s (waiting for containers)\n\n{all_logs}"
-            )
+        _check_timeout(client, container_ids, start_time, timeout, "waiting for containers")
 
-        all_running = True
-        for container_id in container_ids:
-            status = _get_container_status(client, container_id)
+        failed_id = _find_exited_container(client, container_ids)
+        if failed_id:
+            logs = _get_container_logs(client, failed_id)
+            raise HealthcheckError(f"Container {failed_id[:12]} exited:\n{logs}")
 
-            if status == "exited":
-                logs = _get_container_logs(client, container_id)
-                raise HealthcheckError(f"Container {container_id[:12]} exited:\n{logs}")
-
-            if status != "running":
-                all_running = False
-
-        if all_running:
-            break
+        if _all_containers_running(client, container_ids):
+            return
 
         await asyncio.sleep(1)
 
-    # Phase 2: HTTP health probes for containers with exposed ports
-    http_targets = _get_http_targets(client, container_ids)
 
+async def _wait_for_http_healthy(
+    client: docker.DockerClient,
+    container_ids: list[str],
+    start_time: float,
+    timeout: int,
+) -> None:
+    """Wait for HTTP endpoints to respond successfully."""
+    http_targets = _get_http_targets(client, container_ids)
     if not http_targets:
-        return  # No HTTP ports to probe
+        return
 
     async with httpx.AsyncClient(timeout=5.0) as http_client:
         while True:
-            elapsed = asyncio.get_event_loop().time() - start_time
-            if elapsed > timeout:
+            _check_timeout(client, container_ids, start_time, timeout, "HTTP health check")
+
+            error = await _probe_http_targets(http_client, http_targets)
+            if error:
                 all_logs = _get_all_container_logs(client, container_ids)
-                raise HealthcheckError(
-                    f"HTTP health check timed out after {timeout}s\n\n{all_logs}"
-                )
+                raise HealthcheckError(f"{error}\n\n{all_logs}")
 
-            all_healthy = True
-            for url in http_targets:
-                try:
-                    response = await http_client.get(url)
-                    if response.status_code >= 500:
-                        # App is running but returning errors - fail immediately
-                        all_logs = _get_all_container_logs(client, container_ids)
-                        raise HealthcheckError(
-                            f"HTTP {response.status_code} from {url}\n\n{all_logs}"
-                        )
-                except httpx.RequestError:
-                    # Connection refused, etc - app not ready yet, keep trying
-                    all_healthy = False
-
-            if all_healthy:
+            if await _all_targets_healthy(http_client, http_targets):
                 return
 
             await asyncio.sleep(2)
+
+
+def _check_timeout(
+    client: docker.DockerClient,
+    container_ids: list[str],
+    start_time: float,
+    timeout: int,
+    phase: str,
+) -> None:
+    """Raise HealthcheckError if timeout exceeded."""
+    elapsed = asyncio.get_event_loop().time() - start_time
+    if elapsed > timeout:
+        all_logs = _get_all_container_logs(client, container_ids)
+        raise HealthcheckError(f"Health check timed out after {timeout}s ({phase})\n\n{all_logs}")
+
+
+def _find_exited_container(client: docker.DockerClient, container_ids: list[str]) -> str | None:
+    """Return first exited container ID, or None if none exited."""
+    for container_id in container_ids:
+        if _get_container_status(client, container_id) == "exited":
+            return container_id
+    return None
+
+
+def _all_containers_running(client: docker.DockerClient, container_ids: list[str]) -> bool:
+    """Check if all containers are in running state."""
+    return all(_get_container_status(client, cid) == "running" for cid in container_ids)
+
+
+async def _probe_http_targets(
+    http_client: httpx.AsyncClient,
+    targets: list[str],
+) -> str | None:
+    """Probe targets for server errors. Returns error message or None."""
+    for url in targets:
+        try:
+            response = await http_client.get(url)
+            if response.status_code >= 500:
+                return f"HTTP {response.status_code} from {url}"
+        except httpx.RequestError:
+            pass  # Not ready yet, not a fatal error
+    return None
+
+
+async def _all_targets_healthy(http_client: httpx.AsyncClient, targets: list[str]) -> bool:
+    """Check if all HTTP targets respond without error."""
+    for url in targets:
+        try:
+            response = await http_client.get(url)
+            if response.status_code >= 500:
+                return False
+        except httpx.RequestError:
+            return False
+    return True
 
 
 def _get_http_targets(client: docker.DockerClient, container_ids: list[str]) -> list[str]:
