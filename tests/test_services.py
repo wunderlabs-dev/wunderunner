@@ -161,3 +161,37 @@ class TestHealthcheck:
         with patch("wunderunner.activities.services.get_client", return_value=mock_client):
             # Should complete without raising
             await services.healthcheck(["abc123"], timeout=5)
+
+    @pytest.mark.asyncio
+    async def test_connection_refused_then_success(self, mock_container):
+        """Healthcheck retries and succeeds after initial connection refused."""
+        container = mock_container(
+            status="running",
+            ports={"8000/tcp": [{"HostPort": "8000"}]},
+        )
+        mock_client = MagicMock()
+        mock_client.containers.get.return_value = container
+
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+
+        call_count = 0
+
+        async def get_with_retry(*args, **kwargs):
+            nonlocal call_count
+            call_count += 1
+            if call_count < 3:
+                raise httpx.RequestError("Connection refused")
+            return mock_response
+
+        with (
+            patch("wunderunner.activities.services.get_client", return_value=mock_client),
+            patch("httpx.AsyncClient") as mock_httpx,
+            patch("wunderunner.activities.services.asyncio.sleep", new_callable=AsyncMock),
+        ):
+            mock_httpx_instance = AsyncMock()
+            mock_httpx_instance.get.side_effect = get_with_retry
+            mock_httpx.return_value.__aenter__.return_value = mock_httpx_instance
+
+            await services.healthcheck(["abc123"], timeout=10)
+            assert call_count >= 3
