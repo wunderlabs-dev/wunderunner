@@ -312,3 +312,46 @@ class TestStop:
         with patch("asyncio.create_subprocess_exec") as mock_exec:
             await services.stop(tmp_path)
             mock_exec.assert_not_called()
+
+
+class TestGenerate:
+    """Tests for generate function."""
+
+    @pytest.mark.asyncio
+    async def test_happy_path_returns_compose_yaml(self):
+        """Generate returns compose YAML from agent."""
+        from wunderunner.models.analysis import Analysis, BuildStrategy, CodeStyle, ProjectStructure
+
+        # Minimal analysis object
+        analysis = Analysis(
+            project_structure=ProjectStructure(
+                runtime="python",
+                framework=None,
+                package_manager="pip",
+                entry_point="app.py",
+            ),
+            build_strategy=BuildStrategy(
+                build_command=None,
+                start_command="python app.py",
+            ),
+            code_style=CodeStyle(),
+            env_vars=[],
+        )
+
+        mock_result = MagicMock()
+        mock_result.output.compose_yaml = "version: '3'\nservices:\n  app:\n    build: .\n"
+
+        with patch("wunderunner.activities.services.compose_agent") as mock_agent:
+            mock_agent.USER_PROMPT.render.return_value = "test prompt"
+            mock_agent.agent.run = AsyncMock(return_value=mock_result)
+
+            with patch("wunderunner.activities.services.get_fallback_model"):
+                result = await services.generate(
+                    analysis=analysis,
+                    dockerfile_content="FROM python:3.11\n",
+                    learnings=[],
+                    hints=[],
+                )
+
+                assert "version" in result
+                assert "services" in result
