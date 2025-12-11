@@ -52,3 +52,27 @@ class TestHealthcheck:
         """Healthcheck with no containers should raise HealthcheckError."""
         with pytest.raises(HealthcheckError, match="No containers to check"):
             await services.healthcheck([])
+
+    @pytest.mark.asyncio
+    async def test_happy_path_containers_running_http_success(self, mock_container):
+        """Healthcheck passes when containers run and HTTP returns 200."""
+        container = mock_container(
+            status="running",
+            ports={"8000/tcp": [{"HostPort": "8000"}]},
+        )
+        mock_client = MagicMock()
+        mock_client.containers.get.return_value = container
+
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+
+        with (
+            patch("wunderunner.activities.services.get_client", return_value=mock_client),
+            patch("httpx.AsyncClient") as mock_httpx,
+        ):
+            mock_httpx_instance = AsyncMock()
+            mock_httpx_instance.get.return_value = mock_response
+            mock_httpx.return_value.__aenter__.return_value = mock_httpx_instance
+
+            # Should complete without raising
+            await services.healthcheck(["abc123"], timeout=5)
