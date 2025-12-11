@@ -42,3 +42,13 @@ def mock_docker_client(mock_container):
     container = mock_container()
     client.containers.get.return_value = container
     return client
+
+
+class TestHealthcheck:
+    """Tests for healthcheck function."""
+
+    @pytest.mark.asyncio
+    async def test_empty_container_list_raises_error(self):
+        """Healthcheck with no containers should raise HealthcheckError."""
+        with pytest.raises(HealthcheckError, match="No containers to check"):
+            await services.healthcheck([])
