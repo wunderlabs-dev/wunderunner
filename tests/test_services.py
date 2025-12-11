@@ -104,3 +104,25 @@ class TestHealthcheck:
         ):
             with pytest.raises(HealthcheckError, match="timed out.*waiting for containers"):
                 await services.healthcheck(["abc123"], timeout=1)
+
+    @pytest.mark.asyncio
+    async def test_timeout_waiting_for_http(self, mock_container):
+        """Healthcheck times out if HTTP never responds."""
+        container = mock_container(
+            status="running",
+            ports={"8000/tcp": [{"HostPort": "8000"}]},
+        )
+        mock_client = MagicMock()
+        mock_client.containers.get.return_value = container
+
+        with (
+            patch("wunderunner.activities.services.get_client", return_value=mock_client),
+            patch("httpx.AsyncClient") as mock_httpx,
+            patch("wunderunner.activities.services.asyncio.sleep", new_callable=AsyncMock),
+        ):
+            mock_httpx_instance = AsyncMock()
+            mock_httpx_instance.get.side_effect = httpx.RequestError("Connection refused")
+            mock_httpx.return_value.__aenter__.return_value = mock_httpx_instance
+
+            with pytest.raises(HealthcheckError, match="timed out.*HTTP"):
+                await services.healthcheck(["abc123"], timeout=1)
