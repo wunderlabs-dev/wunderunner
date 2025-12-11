@@ -238,3 +238,29 @@ class TestStart:
         with patch("asyncio.create_subprocess_exec", side_effect=create_subprocess):
             result = await services.start(tmp_path)
             assert result == ["container1", "container2"]
+
+    @pytest.mark.asyncio
+    async def test_compose_up_fails_raises_error(self, tmp_path):
+        """Start raises error when docker compose up fails."""
+        compose_file = tmp_path / "docker-compose.yaml"
+        compose_file.write_text("version: '3'\nservices:\n  app:\n    image: alpine\n")
+
+        call_count = 0
+
+        async def create_subprocess(*args, **kwargs):
+            nonlocal call_count
+            call_count += 1
+            proc = MagicMock()
+            if call_count == 1:
+                # down succeeds
+                proc.returncode = 0
+                proc.communicate = AsyncMock(return_value=(b"", b""))
+            else:
+                # up fails
+                proc.returncode = 1
+                proc.communicate = AsyncMock(return_value=(b"Error: build failed", b""))
+            return proc
+
+        with patch("asyncio.create_subprocess_exec", side_effect=create_subprocess):
+            with pytest.raises(StartError, match="docker compose up failed"):
+                await services.start(tmp_path)
