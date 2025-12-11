@@ -205,3 +205,36 @@ class TestStart:
         """Start raises error when docker-compose.yaml doesn't exist."""
         with pytest.raises(StartError, match="docker-compose.yaml not found"):
             await services.start(tmp_path)
+
+    @pytest.mark.asyncio
+    async def test_happy_path_returns_container_ids(self, tmp_path):
+        """Start returns container IDs on success."""
+        compose_file = tmp_path / "docker-compose.yaml"
+        compose_file.write_text("version: '3'\nservices:\n  app:\n    image: alpine\n")
+
+        async def mock_subprocess(*args, **kwargs):
+            proc = MagicMock()
+            proc.returncode = 0
+            proc.communicate = AsyncMock(return_value=(b"", b""))
+            return proc
+
+        async def mock_subprocess_ps(*args, **kwargs):
+            proc = MagicMock()
+            proc.returncode = 0
+            # docker compose ps -q returns container IDs
+            proc.communicate = AsyncMock(return_value=(b"container1\ncontainer2\n", b""))
+            return proc
+
+        call_count = 0
+
+        async def create_subprocess(*args, **kwargs):
+            nonlocal call_count
+            call_count += 1
+            # First two calls are down and up, third is ps
+            if call_count <= 2:
+                return await mock_subprocess(*args, **kwargs)
+            return await mock_subprocess_ps(*args, **kwargs)
+
+        with patch("asyncio.create_subprocess_exec", side_effect=create_subprocess):
+            result = await services.start(tmp_path)
+            assert result == ["container1", "container2"]
