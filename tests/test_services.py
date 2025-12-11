@@ -355,3 +355,36 @@ class TestGenerate:
 
                 assert "version" in result
                 assert "services" in result
+
+    @pytest.mark.asyncio
+    async def test_ai_error_raises_services_error(self):
+        """Generate raises ServicesError when agent fails."""
+        from wunderunner.models.analysis import Analysis, BuildStrategy, CodeStyle, ProjectStructure
+
+        analysis = Analysis(
+            project_structure=ProjectStructure(
+                runtime="python",
+                framework=None,
+                package_manager="pip",
+                entry_point="app.py",
+            ),
+            build_strategy=BuildStrategy(
+                build_command=None,
+                start_command="python app.py",
+            ),
+            code_style=CodeStyle(),
+            env_vars=[],
+        )
+
+        with patch("wunderunner.activities.services.compose_agent") as mock_agent:
+            mock_agent.USER_PROMPT.render.return_value = "test prompt"
+            mock_agent.agent.run = AsyncMock(side_effect=Exception("API error"))
+
+            with patch("wunderunner.activities.services.get_fallback_model"):
+                with pytest.raises(ServicesError, match="Failed to generate"):
+                    await services.generate(
+                        analysis=analysis,
+                        dockerfile_content="FROM python:3.11\n",
+                        learnings=[],
+                        hints=[],
+                    )
