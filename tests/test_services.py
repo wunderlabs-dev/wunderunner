@@ -264,3 +264,20 @@ class TestStart:
         with patch("asyncio.create_subprocess_exec", side_effect=create_subprocess):
             with pytest.raises(StartError, match="docker compose up failed"):
                 await services.start(tmp_path)
+
+    @pytest.mark.asyncio
+    async def test_no_containers_started_raises_error(self, tmp_path):
+        """Start raises error when no containers are started."""
+        compose_file = tmp_path / "docker-compose.yaml"
+        compose_file.write_text("version: '3'\nservices:\n  app:\n    image: alpine\n")
+
+        async def create_subprocess(*args, **kwargs):
+            proc = MagicMock()
+            proc.returncode = 0
+            # ps returns empty (no containers)
+            proc.communicate = AsyncMock(return_value=(b"", b""))
+            return proc
+
+        with patch("asyncio.create_subprocess_exec", side_effect=create_subprocess):
+            with pytest.raises(StartError, match="No containers started"):
+                await services.start(tmp_path)
