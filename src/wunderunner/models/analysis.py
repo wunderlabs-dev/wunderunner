@@ -44,6 +44,14 @@ class ServiceConfig(BaseModel):
     env_vars: list[str]  # Names of env vars this service satisfies
 
 
+class DetectedService(BaseModel):
+    """A service detected from env vars by the detection agent."""
+
+    type: str  # "postgres", "redis", "mysql", "mongodb"
+    env_vars: list[str]  # Which env vars belong to this service
+    confidence: float  # 0-1, how confident the grouping is
+
+
 class CodeStyle(BaseModel):
     """Result of code style analysis."""
 

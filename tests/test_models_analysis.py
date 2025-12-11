@@ -4,6 +4,7 @@ from wunderunner.models.analysis import (
     Analysis,
     BuildStrategy,
     CodeStyle,
+    DetectedService,
     ProjectStructure,
     ServiceConfig,
 )
@@ -43,3 +44,24 @@ def test_analysis_services_defaults_to_empty():
         code_style=CodeStyle(),
     )
     assert analysis.services == []
+
+
+def test_detected_service_creation():
+    """DetectedService captures agent's service detection."""
+    detected = DetectedService(
+        type="postgres",
+        env_vars=["DATABASE_HOST", "DATABASE_USER", "DATABASE_PASS"],
+        confidence=0.95,
+    )
+    assert detected.type == "postgres"
+    assert detected.confidence == 0.95
+
+
+def test_detected_service_confidence_bounds():
+    """DetectedService confidence must be 0-1."""
+    detected = DetectedService(
+        type="redis",
+        env_vars=["REDIS_URL"],
+        confidence=0.5,
+    )
+    assert 0 <= detected.confidence <= 1
