@@ -90,3 +90,17 @@ class TestHealthcheck:
         with patch("wunderunner.activities.services.get_client", return_value=mock_client):
             with pytest.raises(HealthcheckError, match="exited"):
                 await services.healthcheck(["abc123"], timeout=5)
+
+    @pytest.mark.asyncio
+    async def test_timeout_waiting_for_containers(self, mock_container):
+        """Healthcheck times out if containers never reach running state."""
+        container = mock_container(status="created")  # Never becomes running
+        mock_client = MagicMock()
+        mock_client.containers.get.return_value = container
+
+        with (
+            patch("wunderunner.activities.services.get_client", return_value=mock_client),
+            patch("wunderunner.activities.services.asyncio.sleep", new_callable=AsyncMock),
+        ):
+            with pytest.raises(HealthcheckError, match="timed out.*waiting for containers"):
+                await services.healthcheck(["abc123"], timeout=1)
