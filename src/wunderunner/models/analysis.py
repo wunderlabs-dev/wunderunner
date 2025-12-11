@@ -37,6 +37,13 @@ class EnvVar(BaseModel):
     service: str | None = None
 
 
+class ServiceConfig(BaseModel):
+    """A service to create in docker-compose."""
+
+    type: str  # "postgres", "redis", "mysql", "mongodb"
+    env_vars: list[str]  # Names of env vars this service satisfies
+
+
 class CodeStyle(BaseModel):
     """Result of code style analysis."""
 
@@ -55,3 +62,4 @@ class Analysis(BaseModel):
     build_strategy: BuildStrategy
     env_vars: list[EnvVar] = []
     code_style: CodeStyle
+    services: list[ServiceConfig] = []  # Confirmed services to create

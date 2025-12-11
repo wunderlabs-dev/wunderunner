@@ -6,6 +6,7 @@ from wunderunner.models.analysis import (
     CodeStyle,
     EnvVar,
     ProjectStructure,
+    ServiceConfig,
 )
 from wunderunner.models.validation import GradeBreakdown, ValidationResult
 
@@ -16,5 +17,6 @@ __all__ = [
     "EnvVar",
     "GradeBreakdown",
     "ProjectStructure",
+    "ServiceConfig",
     "ValidationResult",
 ]
