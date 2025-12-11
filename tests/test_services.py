@@ -1,7 +1,5 @@
 """Integration tests for services activities."""
 
-import asyncio
-from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
@@ -87,9 +85,11 @@ class TestHealthcheck:
         mock_client = MagicMock()
         mock_client.containers.get.return_value = container
 
-        with patch("wunderunner.activities.services.get_client", return_value=mock_client):
-            with pytest.raises(HealthcheckError, match="exited"):
-                await services.healthcheck(["abc123"], timeout=5)
+        with (
+            patch("wunderunner.activities.services.get_client", return_value=mock_client),
+            pytest.raises(HealthcheckError, match="exited"),
+        ):
+            await services.healthcheck(["abc123"], timeout=5)
 
     @pytest.mark.asyncio
     async def test_timeout_waiting_for_containers(self, mock_container):
@@ -101,9 +101,9 @@ class TestHealthcheck:
         with (
             patch("wunderunner.activities.services.get_client", return_value=mock_client),
             patch("wunderunner.activities.services.asyncio.sleep", new_callable=AsyncMock),
+            pytest.raises(HealthcheckError, match="timed out.*waiting for containers"),
         ):
-            with pytest.raises(HealthcheckError, match="timed out.*waiting for containers"):
-                await services.healthcheck(["abc123"], timeout=1)
+            await services.healthcheck(["abc123"], timeout=1)
 
     @pytest.mark.asyncio
     async def test_timeout_waiting_for_http(self, mock_container):
@@ -261,9 +261,11 @@ class TestStart:
                 proc.communicate = AsyncMock(return_value=(b"Error: build failed", b""))
             return proc
 
-        with patch("asyncio.create_subprocess_exec", side_effect=create_subprocess):
-            with pytest.raises(StartError, match="docker compose up failed"):
-                await services.start(tmp_path)
+        with (
+            patch("asyncio.create_subprocess_exec", side_effect=create_subprocess),
+            pytest.raises(StartError, match="docker compose up failed"),
+        ):
+            await services.start(tmp_path)
 
     @pytest.mark.asyncio
     async def test_no_containers_started_raises_error(self, tmp_path):
@@ -278,9 +280,11 @@ class TestStart:
             proc.communicate = AsyncMock(return_value=(b"", b""))
             return proc
 
-        with patch("asyncio.create_subprocess_exec", side_effect=create_subprocess):
-            with pytest.raises(StartError, match="No containers started"):
-                await services.start(tmp_path)
+        with (
+            patch("asyncio.create_subprocess_exec", side_effect=create_subprocess),
+            pytest.raises(StartError, match="No containers started"),
+        ):
+            await services.start(tmp_path)
 
 
 class TestStop:
@@ -380,11 +384,13 @@ class TestGenerate:
             mock_agent.USER_PROMPT.render.return_value = "test prompt"
             mock_agent.agent.run = AsyncMock(side_effect=Exception("API error"))
 
-            with patch("wunderunner.activities.services.get_fallback_model"):
-                with pytest.raises(ServicesError, match="Failed to generate"):
-                    await services.generate(
-                        analysis=analysis,
-                        dockerfile_content="FROM python:3.11\n",
-                        learnings=[],
-                        hints=[],
-                    )
+            with (
+                patch("wunderunner.activities.services.get_fallback_model"),
+                pytest.raises(ServicesError, match="Failed to generate"),
+            ):
+                await services.generate(
+                    analysis=analysis,
+                    dockerfile_content="FROM python:3.11\n",
+                    learnings=[],
+                    hints=[],
+                )
