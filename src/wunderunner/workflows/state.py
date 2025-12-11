@@ -32,6 +32,7 @@ class Severity(StrEnum):
 ProgressCallback = Callable[[Severity, str], None]
 SecretPromptCallback = Callable[[str, str | None], str]  # (name, service) -> value
 HintPromptCallback = Callable[[list["Learning"]], str | None]  # (learnings) -> hint or None to quit
+ServicePromptCallback = Callable[[str, list[str]], bool]  # (service_type, env_vars) -> confirm
 
 
 def _noop_progress(severity: Severity, message: str) -> None:
@@ -46,6 +47,11 @@ def _noop_secret_prompt(name: str, service: str | None) -> str:
 def _noop_hint_prompt(learnings: list["Learning"]) -> str | None:
     """Default hint prompt - returns None to quit."""
     return None
+
+
+def _noop_service_prompt(service_type: str, env_vars: list[str]) -> bool:
+    """Default service prompt - auto-confirms all services."""
+    return True
 
 
 @dataclass
@@ -69,6 +75,7 @@ class ContainerizeState:
     on_progress: ProgressCallback = _noop_progress
     on_secret_prompt: SecretPromptCallback = _noop_secret_prompt
     on_hint_prompt: HintPromptCallback = _noop_hint_prompt
+    on_service_prompt: ServicePromptCallback = _noop_service_prompt
 
     # Analysis result (set by Analyze node)
     # Import here to avoid circular import
