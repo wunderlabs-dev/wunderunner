@@ -6,6 +6,7 @@ from wunderunner.agents.analysis import (
     env_vars,
     project_structure,
     secrets,
+    services,
 )
 
 __all__ = [
@@ -14,4 +15,5 @@ __all__ = [
     "env_vars",
     "project_structure",
     "secrets",
+    "services",
 ]
