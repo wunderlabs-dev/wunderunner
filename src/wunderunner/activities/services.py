@@ -14,7 +14,7 @@ from docker.errors import NotFound
 from wunderunner.activities.docker import get_client
 from wunderunner.agents.generation import compose as compose_agent
 from wunderunner.exceptions import HealthcheckError, ServicesError, StartError
-from wunderunner.models.analysis import Analysis
+from wunderunner.models.analysis import Analysis, ServiceConfig
 from wunderunner.settings import Generation, get_fallback_model
 from wunderunner.workflows.state import Learning
 
@@ -26,6 +26,7 @@ async def generate(
     hints: list[str],
     existing: str | None = None,
     project_path: Path | None = None,
+    services: list[ServiceConfig] | None = None,
 ) -> str:
     """Generate or refine docker-compose.yaml based on analysis and learnings.
 
@@ -36,6 +37,7 @@ async def generate(
         hints: User-provided hints.
         existing: If provided, refine this compose file instead of generating fresh.
         project_path: Path to project directory (for tool access).
+        services: List of confirmed services to create containers for.
 
     Returns:
         docker-compose.yaml content as string.
@@ -46,6 +48,11 @@ async def generate(
     # Extract secrets from analysis
     secrets = [v for v in analysis.env_vars if v.secret]
 
+    # Convert services to dict format for template
+    services_data = None
+    if services:
+        services_data = [{"type": s.type, "env_vars": s.env_vars} for s in services]
+
     prompt = compose_agent.USER_PROMPT.render(
         analysis=analysis.model_dump(),
         dockerfile=dockerfile_content,
@@ -53,6 +60,7 @@ async def generate(
         learnings=learnings,
         hints=hints,
         existing_compose=existing,
+        services=services_data,
     )
 
     try:
