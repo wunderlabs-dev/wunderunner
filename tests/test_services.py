@@ -195,3 +195,13 @@ class TestHealthcheck:
 
             await services.healthcheck(["abc123"], timeout=10)
             assert call_count >= 3
+
+
+class TestStart:
+    """Tests for start function."""
+
+    @pytest.mark.asyncio
+    async def test_compose_file_missing_raises_error(self, tmp_path):
+        """Start raises error when docker-compose.yaml doesn't exist."""
+        with pytest.raises(StartError, match="docker-compose.yaml not found"):
+            await services.start(tmp_path)
