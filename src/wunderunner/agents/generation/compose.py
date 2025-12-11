@@ -27,6 +27,15 @@ Port: {{ analysis.project_structure.port or 3000 }}
 {{ dockerfile }}
 </dockerfile>
 
+{% if services %}
+<services_to_create>
+Create these service containers alongside the app:
+{% for svc in services %}
+- {{ svc.type }}: wire env vars {{ svc.env_vars | join(', ') }}
+{% endfor %}
+</services_to_create>
+{% endif %}
+
 {% if learnings %}
 <previous_errors>
 {% for learning in learnings %}
@@ -41,29 +50,65 @@ Port: {{ analysis.project_structure.port or 3000 }}
 </current_compose>
 Fix the errors and return improved docker-compose.yaml.
 {% else %}
-Generate a minimal docker-compose.yaml for this project.
+Generate a docker-compose.yaml for this project.
 {% endif %}
 """)
 
 SYSTEM_PROMPT = """\
-Generate a docker-compose.yaml file. Keep it minimal.
+Generate a docker-compose.yaml file.
 
 RULES:
 1. Start with "services:" (no version declaration needed)
 2. Match the port from the Dockerfile's EXPOSE
 3. Use "build: ." to build from the Dockerfile
 4. NEVER add volumes - no volumes section, no volume mounts
-5. Do NOT add databases unless explicitly needed
-6. Do NOT add health checks unless the app has a /health endpoint
+5. Do NOT add health checks unless the app has a /health endpoint
 
-MINIMAL TEMPLATE:
-services:
+SERVICE CONTAINERS:
+If <services_to_create> is provided, add those containers using these templates:
+
+postgres:
+  image: postgres:16-alpine
+  environment:
+    POSTGRES_USER: postgres
+    POSTGRES_PASSWORD: postgres
+    POSTGRES_DB: app
+  ports:
+    - "5432:5432"
+
+redis:
+  image: redis:7-alpine
+  ports:
+    - "6379:6379"
+
+mysql:
+  image: mysql:8
+  environment:
+    MYSQL_ROOT_PASSWORD: root
+    MYSQL_DATABASE: app
+  ports:
+    - "3306:3306"
+
+mongodb:
+  image: mongo:7
+  ports:
+    - "27017:27017"
+
+WIRING ENV VARS:
+For each service, add environment variables to the app container:
+- *_HOST vars → service name (e.g., DATABASE_HOST: postgres)
+- *_USER vars → "postgres" for postgres, "app" for mysql
+- *_PASS/*_PASSWORD vars → "postgres" for postgres, "app" for mysql
+- *_PORT vars → service port (5432, 6379, 3306, 27017)
+- *_URL vars → full connection URL (e.g., postgres://postgres:postgres@postgres:5432/app)
+
+APP ORDERING:
+When services exist, add depends_on to the app:
   app:
-    build: .
-    ports:
-      - "3000:3000"
+    depends_on:
+      - postgres
+      - redis
 
-That's it. Only add more if the project actually needs it.
 NEVER add volumes. Volumes cause mount conflicts with Dockerfile operations.
 """
 
