@@ -150,3 +150,14 @@ class TestHealthcheck:
 
             with pytest.raises(HealthcheckError, match="HTTP 500"):
                 await services.healthcheck(["abc123"], timeout=5)
+
+    @pytest.mark.asyncio
+    async def test_no_http_ports_succeeds(self, mock_container):
+        """Healthcheck passes when no ports exposed (skips HTTP phase)."""
+        container = mock_container(status="running", ports={})
+        mock_client = MagicMock()
+        mock_client.containers.get.return_value = container
+
+        with patch("wunderunner.activities.services.get_client", return_value=mock_client):
+            # Should complete without raising
+            await services.healthcheck(["abc123"], timeout=5)
