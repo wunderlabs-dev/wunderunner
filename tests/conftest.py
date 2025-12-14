@@ -219,3 +219,32 @@ def workflow_state(tmp_path, mock_progress) -> ContainerizeState:
         rebuild=False,
         on_progress=mock_progress,
     )
+
+
+@pytest.fixture
+def mock_project_structure_result() -> ProjectStructure:
+    """Default project structure result for mocking."""
+    return ProjectStructure(
+        runtime="node",
+        framework="express",
+        package_manager="npm",
+        entry_point="index.js",
+    )
+
+
+@pytest.fixture
+def mock_build_strategy_result() -> BuildStrategy:
+    """Default build strategy result for mocking."""
+    return BuildStrategy(
+        build_command="npm run build",
+        start_command="npm start",
+    )
+
+
+@pytest.fixture
+def mock_code_style_result() -> CodeStyle:
+    """Default code style result for mocking."""
+    return CodeStyle(
+        uses_typescript=True,
+        uses_eslint=True,
+    )
