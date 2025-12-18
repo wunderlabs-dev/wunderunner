@@ -1,6 +1,12 @@
 """Tests for pipeline artifact models."""
 
-from wunderunner.pipeline.models import DependencyFindings, NativeDependency, RuntimeFindings
+from wunderunner.pipeline.models import (
+    ConfigFindings,
+    DependencyFindings,
+    EnvVarFinding,
+    NativeDependency,
+    RuntimeFindings,
+)
 
 
 def test_runtime_findings_required_fields():
@@ -46,3 +52,24 @@ def test_dependency_findings_with_native():
     )
     assert len(findings.native_deps) == 1
     assert findings.native_deps[0].name == "libpq-dev"
+
+
+def test_config_findings_empty():
+    """ConfigFindings defaults to empty lists."""
+    findings = ConfigFindings()
+    assert findings.env_vars == []
+    assert findings.config_files == []
+
+
+def test_config_findings_with_secrets():
+    """ConfigFindings tracks env vars with secret flag."""
+    findings = ConfigFindings(
+        env_vars=[
+            EnvVarFinding(name="DATABASE_URL", required=True, secret=True),
+            EnvVarFinding(name="PORT", required=False, default="3000"),
+        ],
+        config_files=[".env.example"],
+    )
+    assert len(findings.env_vars) == 2
+    assert findings.env_vars[0].secret is True
+    assert findings.env_vars[1].default == "3000"

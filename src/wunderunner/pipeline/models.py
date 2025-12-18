@@ -27,3 +27,22 @@ class DependencyFindings(BaseModel):
     native_deps: list[NativeDependency] = Field(default_factory=list)
     build_command: str | None = Field(default=None, description="Build command: npm run build")
     start_command: str | None = Field(default=None, description="Start command: npm start")
+
+
+class EnvVarFinding(BaseModel):
+    """An environment variable discovered in the project."""
+
+    name: str = Field(description="Variable name: DATABASE_URL")
+    required: bool = Field(default=True, description="Whether the app fails without it")
+    secret: bool = Field(default=False, description="Whether it contains sensitive data")
+    default: str | None = Field(default=None, description="Default value if any")
+    service: str | None = Field(default=None, description="Related service: postgres, redis")
+
+
+class ConfigFindings(BaseModel):
+    """Output from config-finder specialist."""
+
+    env_vars: list[EnvVarFinding] = Field(default_factory=list)
+    config_files: list[str] = Field(
+        default_factory=list, description="Config files found: .env.example"
+    )
