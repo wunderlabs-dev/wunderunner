@@ -2,6 +2,7 @@
 
 from wunderunner.pipeline.models import (
     ConfigFindings,
+    ContainerizationPlan,
     DependencyFindings,
     EnvVarFinding,
     NativeDependency,
@@ -9,6 +10,7 @@ from wunderunner.pipeline.models import (
     RuntimeFindings,
     ServiceFinding,
     ServiceFindings,
+    VerificationStep,
 )
 
 
@@ -108,3 +110,31 @@ def test_research_result_combines_findings():
     assert result.dependencies.package_manager == "uv"
     assert len(result.config.env_vars) == 1
     assert len(result.services.services) == 1
+
+
+def test_containerization_plan_required_fields():
+    """ContainerizationPlan requires dockerfile content."""
+    plan = ContainerizationPlan(
+        summary="Python FastAPI app",
+        dockerfile="FROM python:3.11-slim\nWORKDIR /app\n",
+        verification=[
+            VerificationStep(command="docker build -t app .", expected="exit 0"),
+        ],
+        reasoning="Using slim image for minimal size",
+    )
+    assert plan.dockerfile.startswith("FROM")
+    assert plan.compose is None
+    assert len(plan.verification) == 1
+
+
+def test_containerization_plan_with_compose():
+    """ContainerizationPlan can include compose content."""
+    plan = ContainerizationPlan(
+        summary="Node app with PostgreSQL",
+        dockerfile="FROM node:20-slim\n",
+        compose="services:\n  app:\n    build: .\n",
+        verification=[],
+        reasoning="Multi-service setup",
+    )
+    assert plan.compose is not None
+    assert "services:" in plan.compose

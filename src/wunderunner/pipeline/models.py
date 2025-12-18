@@ -69,3 +69,24 @@ class ResearchResult(BaseModel):
     dependencies: DependencyFindings
     config: ConfigFindings
     services: ServiceFindings
+
+
+class VerificationStep(BaseModel):
+    """A verification step to run after file generation."""
+
+    command: str = Field(description="Command to run: docker build -t app .")
+    expected: str = Field(description="Expected outcome: exit 0, 200 OK")
+    phase: str = Field(default="BUILD", description="Phase: BUILD, START, HEALTHCHECK")
+
+
+class ContainerizationPlan(BaseModel):
+    """Output from PLAN phase - exact file contents."""
+
+    summary: str = Field(description="Brief description of the containerization approach")
+    dockerfile: str = Field(description="Exact Dockerfile content")
+    compose: str | None = Field(default=None, description="Exact docker-compose.yaml content")
+    verification: list[VerificationStep] = Field(default_factory=list)
+    reasoning: str = Field(description="Why this approach was chosen")
+    constraints_honored: list[str] = Field(
+        default_factory=list, description="Constraints from fixes.json"
+    )
