@@ -1,5 +1,5 @@
 """PLAN phase - generate exact containerization content."""
 
-from wunderunner.pipeline.plan.agent import generate_plan
+from wunderunner.pipeline.plan.runner import run_plan
 
-__all__ = ["generate_plan"]
+__all__ = ["run_plan"]
