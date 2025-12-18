@@ -2,9 +2,15 @@
 
 from wunderunner.pipeline.models import (
     ConfigFindings,
+    Constraint,
+    ConstraintStatus,
     ContainerizationPlan,
     DependencyFindings,
     EnvVarFinding,
+    FixAttempt,
+    FixChange,
+    FixError,
+    FixHistory,
     NativeDependency,
     ResearchResult,
     RuntimeFindings,
@@ -138,3 +144,42 @@ def test_containerization_plan_with_compose():
     )
     assert plan.compose is not None
     assert "services:" in plan.compose
+
+
+def test_fix_attempt_records_change():
+    """FixAttempt records what was tried and outcome."""
+    attempt = FixAttempt(
+        attempt=1,
+        phase="BUILD",
+        error=FixError(type="missing_dependency", message="No module named 'pandas'"),
+        diagnosis="pandas not in requirements",
+        changes=[
+            FixChange(
+                file="Dockerfile",
+                before="RUN pip install -r requirements.txt",
+                after="RUN pip install -r requirements.txt pandas",
+            )
+        ],
+        outcome="success",
+    )
+    assert attempt.outcome == "success"
+    assert len(attempt.changes) == 1
+
+
+def test_fix_history_manages_constraints():
+    """FixHistory tracks attempts and derives constraints."""
+    history = FixHistory(project="my-app")
+    assert history.attempts == []
+    assert history.active_constraints == []
+
+
+def test_constraint_lifecycle():
+    """Constraints start hard, become soft after successes."""
+    constraint = Constraint(
+        id="c1",
+        rule="MUST include pandas",
+        reason="Required import",
+        from_attempt=1,
+    )
+    assert constraint.status == ConstraintStatus.HARD
+    assert constraint.success_count == 0

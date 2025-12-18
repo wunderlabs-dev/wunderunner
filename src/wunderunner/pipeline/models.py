@@ -1,6 +1,14 @@
 """Pydantic models for pipeline artifacts."""
 
+from datetime import UTC, datetime
+from enum import Enum
+
 from pydantic import BaseModel, Field
+
+
+def _utc_now() -> datetime:
+    """Return current UTC time."""
+    return datetime.now(UTC)
 
 
 class RuntimeFindings(BaseModel):
@@ -90,3 +98,59 @@ class ContainerizationPlan(BaseModel):
     constraints_honored: list[str] = Field(
         default_factory=list, description="Constraints from fixes.json"
     )
+
+
+class ConstraintStatus(str, Enum):
+    """Status of a constraint."""
+
+    HARD = "hard"  # Must be honored
+    SOFT = "soft"  # Can be reconsidered with reasoning
+
+
+class FixError(BaseModel):
+    """Error that triggered a fix attempt."""
+
+    type: str = Field(description="Error type: missing_dependency, build_failed")
+    message: str = Field(description="Error message")
+    exit_code: int | None = Field(default=None)
+
+
+class FixChange(BaseModel):
+    """A single change made during a fix attempt."""
+
+    file: str = Field(description="File that was changed")
+    before: str = Field(description="Content before change")
+    after: str = Field(description="Content after change")
+
+
+class FixAttempt(BaseModel):
+    """Record of a single fix attempt."""
+
+    attempt: int = Field(description="Attempt number: 1, 2, 3")
+    timestamp: datetime = Field(default_factory=_utc_now)
+    phase: str = Field(description="Phase where error occurred: BUILD, START, HEALTHCHECK")
+    error: FixError
+    diagnosis: str = Field(description="What we think caused the error")
+    changes: list[FixChange] = Field(default_factory=list)
+    outcome: str = Field(description="success, failure, partial")
+
+
+class Constraint(BaseModel):
+    """A constraint derived from a successful fix."""
+
+    id: str = Field(description="Unique constraint ID: c1, c2")
+    rule: str = Field(description="The constraint: MUST include pandas")
+    reason: str = Field(description="Why: Required by app.py import")
+    from_attempt: int = Field(description="Which attempt derived this")
+    added_at: datetime = Field(default_factory=_utc_now)
+    success_count: int = Field(default=0, description="Successful builds since added")
+    status: ConstraintStatus = Field(default=ConstraintStatus.HARD)
+
+
+class FixHistory(BaseModel):
+    """Complete fix history for a project."""
+
+    project: str = Field(description="Project name")
+    created_at: datetime = Field(default_factory=_utc_now)
+    attempts: list[FixAttempt] = Field(default_factory=list)
+    active_constraints: list[Constraint] = Field(default_factory=list)
