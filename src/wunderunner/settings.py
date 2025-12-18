@@ -5,6 +5,10 @@ from functools import lru_cache
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from wunderunner.auth.client import get_anthropic_client
+from wunderunner.auth.models import Provider
+from wunderunner.exceptions import NoAuthError
+
 
 class Settings(BaseSettings):
     """Application settings loaded from environment variables."""
@@ -181,3 +185,58 @@ def get_fallback_model(agent: AgentType):
 
     # Multiple models - return FallbackModel
     return FallbackModel(model_instances[0], *model_instances[1:])
+
+
+async def create_model_async(model_str: str):
+    """Create a model instance with OAuth or API key authentication.
+
+    Priority: OAuth tokens → API key → NoAuthError
+
+    Args:
+        model_str: Model string in format "provider:model_name"
+
+    Returns:
+        Configured model instance.
+
+    Raises:
+        NoAuthError: If no authentication is configured for the provider.
+    """
+    from pydantic_ai.models.anthropic import AnthropicModel
+    from pydantic_ai.models.openai import OpenAIModel
+    from pydantic_ai.providers.anthropic import AnthropicProvider
+    from pydantic_ai.providers.openai import OpenAIProvider
+
+    settings = get_settings()
+    provider, model_name = model_str.split(":", 1)
+
+    if provider == Provider.ANTHROPIC.value:
+        # Try OAuth first
+        oauth_client = await get_anthropic_client()
+        if oauth_client:
+            # OAuth client already has Bearer token, pass dummy API key
+            return AnthropicModel(
+                model_name,
+                provider=AnthropicProvider(
+                    api_key="oauth-placeholder",
+                    http_client=oauth_client
+                ),
+            )
+        # Fall back to API key
+        if settings.anthropic_api_key:
+            return AnthropicModel(
+                model_name,
+                provider=AnthropicProvider(api_key=settings.anthropic_api_key),
+            )
+        raise NoAuthError(Provider.ANTHROPIC.value)
+
+    elif provider == Provider.OPENAI.value:
+        # OpenAI: API key only
+        if settings.openai_api_key:
+            return OpenAIModel(
+                model_name,
+                provider=OpenAIProvider(api_key=settings.openai_api_key),
+            )
+        raise NoAuthError(Provider.OPENAI.value)
+
+    else:
+        raise ValueError(f"Unknown provider: {provider}")

@@ -29,7 +29,7 @@ class TestSettings:
             # Clear lru_cache to get fresh settings
             get_settings.cache_clear()
             # Disable .env file loading for this test
-            with patch.object(Settings, 'model_config', {'env_file': None}):
+            with patch.object(Settings, "model_config", {"env_file": None}):
                 settings = Settings()
                 assert settings.anthropic_api_key is None
                 assert settings.openai_api_key is None
@@ -263,3 +263,71 @@ class TestGetFallbackModel:
 
             # Should return a real FallbackModel instance
             assert isinstance(result, FallbackModel)
+
+
+class TestCreateModelWithOAuth:
+    """Test create_model_async with OAuth integration."""
+
+    @pytest.mark.asyncio
+    async def test_uses_oauth_client_when_available(self):
+        """create_model_async uses OAuth client when tokens exist."""
+        import time
+        from unittest.mock import AsyncMock
+        import httpx
+
+        # Create a mock OAuth client
+        mock_client = httpx.AsyncClient(
+            headers={
+                "Authorization": "Bearer oauth_token",
+                "anthropic-beta": "oauth-2025-04-20",
+            }
+        )
+
+        with (
+            patch("wunderunner.settings.get_anthropic_client", new_callable=AsyncMock) as mock_get_client,
+            patch("wunderunner.settings.get_settings") as mock_settings,
+        ):
+            mock_get_client.return_value = mock_client
+            mock_settings.return_value.anthropic_api_key = None
+
+            from wunderunner.settings import create_model_async
+            model = await create_model_async("anthropic:claude-3-5-sonnet-20241022")
+
+            mock_get_client.assert_called_once()
+            # Model should be created (we can't easily verify the client was used)
+            assert model is not None
+
+    @pytest.mark.asyncio
+    async def test_falls_back_to_api_key(self):
+        """create_model_async falls back to API key when no OAuth."""
+        from unittest.mock import AsyncMock
+
+        with (
+            patch("wunderunner.settings.get_anthropic_client", new_callable=AsyncMock) as mock_get_client,
+            patch("wunderunner.settings.get_settings") as mock_settings,
+        ):
+            mock_get_client.return_value = None  # No OAuth
+            mock_settings.return_value.anthropic_api_key = "sk-ant-test"
+
+            from wunderunner.settings import create_model_async
+            model = await create_model_async("anthropic:claude-3-5-sonnet-20241022")
+
+            assert model is not None
+
+    @pytest.mark.asyncio
+    async def test_raises_no_auth_error(self):
+        """create_model_async raises NoAuthError when no auth configured."""
+        from unittest.mock import AsyncMock
+        from wunderunner.exceptions import NoAuthError
+
+        with (
+            patch("wunderunner.settings.get_anthropic_client", new_callable=AsyncMock) as mock_get_client,
+            patch("wunderunner.settings.get_settings") as mock_settings,
+        ):
+            mock_get_client.return_value = None
+            mock_settings.return_value.anthropic_api_key = None
+
+            from wunderunner.settings import create_model_async
+
+            with pytest.raises(NoAuthError):
+                await create_model_async("anthropic:claude-3-5-sonnet-20241022")
