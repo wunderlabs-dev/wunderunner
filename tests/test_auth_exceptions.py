@@ -1,6 +1,5 @@
 """Tests for auth exceptions."""
 
-import pytest
 
 from wunderunner.exceptions import (
     AuthError,

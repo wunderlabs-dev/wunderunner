@@ -4,8 +4,6 @@ import base64
 import hashlib
 import re
 
-import pytest
-
 from wunderunner.auth.pkce import generate_pkce, generate_state
 
 

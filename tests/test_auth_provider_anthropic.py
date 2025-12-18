@@ -1,6 +1,5 @@
 """Tests for Anthropic OAuth provider."""
 
-import pytest
 
 from wunderunner.auth.providers.anthropic import AnthropicOAuth
 

@@ -1,13 +1,11 @@
 """End-to-end tests for auth flow."""
 
-import os
 import time
-from pathlib import Path
-from unittest.mock import AsyncMock, patch
+from unittest.mock import patch
 
 import pytest
 
-from wunderunner.auth.models import AuthStore, Provider, TokenSet
+from wunderunner.auth.models import Provider, TokenSet
 from wunderunner.auth.storage import AUTH_FILE, load_store, save_tokens
 
 

@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, patch
 import pytest
 
 from wunderunner.auth.client import get_anthropic_client
-from wunderunner.auth.models import Provider, TokenSet
+from wunderunner.auth.models import TokenSet
 from wunderunner.auth.providers.anthropic import AnthropicOAuth
 
 
@@ -41,7 +41,7 @@ class TestGetAnthropicClient:
 
             assert client is not None
             # Check headers are set
-            assert "authorization" in [k.lower() for k in client.headers.keys()]
+            assert "authorization" in [k.lower() for k in client.headers]
 
     @pytest.mark.asyncio
     async def test_client_has_bearer_token(self):
@@ -98,9 +98,15 @@ class TestGetAnthropicClient:
         )
 
         with (
-            patch("wunderunner.auth.client.load_store", new_callable=AsyncMock) as mock_load,
-            patch("wunderunner.auth.client.save_tokens", new_callable=AsyncMock) as mock_save,
-            patch("wunderunner.auth.client.refresh_access_token", new_callable=AsyncMock) as mock_refresh,
+            patch(
+                "wunderunner.auth.client.load_store", new_callable=AsyncMock
+            ) as mock_load,
+            patch(
+                "wunderunner.auth.client.save_tokens", new_callable=AsyncMock
+            ) as mock_save,
+            patch(
+                "wunderunner.auth.client.refresh_access_token", new_callable=AsyncMock
+            ) as mock_refresh,
         ):
             from wunderunner.auth.models import AuthStore
             mock_load.return_value = AuthStore(anthropic=expired_tokens)
@@ -124,8 +130,12 @@ class TestGetAnthropicClient:
         )
 
         with (
-            patch("wunderunner.auth.client.load_store", new_callable=AsyncMock) as mock_load,
-            patch("wunderunner.auth.client.refresh_access_token", new_callable=AsyncMock) as mock_refresh,
+            patch(
+                "wunderunner.auth.client.load_store", new_callable=AsyncMock
+            ) as mock_load,
+            patch(
+                "wunderunner.auth.client.refresh_access_token", new_callable=AsyncMock
+            ) as mock_refresh,
         ):
             from wunderunner.auth.models import AuthStore
             from wunderunner.exceptions import TokenRefreshError

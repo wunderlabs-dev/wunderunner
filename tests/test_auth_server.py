@@ -1,7 +1,6 @@
 """Tests for OAuth callback server."""
 
 import asyncio
-from unittest.mock import AsyncMock, patch
 
 import pytest
 
@@ -86,12 +85,12 @@ class TestCallbackServer:
             import aiohttp
             async with aiohttp.ClientSession() as session:
                 url = f"{server.callback_url}?code=test_code&state=wrong_state"
-                async with session.get(url) as resp:
+                async with session.get(url):
                     pass  # Server returns error page
 
         try:
             callback_task = asyncio.create_task(simulate_callback())
-            with pytest.raises(Exception):  # OAuthCallbackError or timeout
+            with pytest.raises((asyncio.TimeoutError, Exception)):
                 await asyncio.wait_for(
                     server.wait_for_callback(expected_state="correct_state"),
                     timeout=2.0,

@@ -1,13 +1,10 @@
 """Tests for CLI auth commands."""
 
-import asyncio
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
-import pytest
 from typer.testing import CliRunner
 
 from wunderunner.cli.main import app
-
 
 runner = CliRunner()
 
@@ -33,6 +30,7 @@ class TestAuthStatus:
     def test_shows_oauth_when_tokens_exist(self):
         """Status shows OAuth when tokens are configured."""
         import time
+
         from wunderunner.auth.models import AuthStore, TokenSet
 
         tokens = TokenSet(

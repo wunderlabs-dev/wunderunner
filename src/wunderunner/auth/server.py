@@ -3,7 +3,7 @@
 import asyncio
 import logging
 from importlib.resources import files
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import parse_qs
 
 from aiohttp import web
 
