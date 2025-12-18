@@ -30,10 +30,12 @@ class TestGetAuthPath:
 
     def test_uses_default_when_no_xdg(self):
         """_get_auth_path uses ~/.local/share when XDG_DATA_HOME not set."""
-        with patch.dict(os.environ, {}, clear=True):
-            with patch("pathlib.Path.home", return_value=Path("/home/user")):
-                path = _get_auth_path()
-                assert path == Path("/home/user/.local/share/wunderunner") / AUTH_FILE
+        with (
+            patch.dict(os.environ, {}, clear=True),
+            patch("pathlib.Path.home", return_value=Path("/home/user")),
+        ):
+            path = _get_auth_path()
+            assert path == Path("/home/user/.local/share/wunderunner") / AUTH_FILE
 
 
 class TestLoadStore:

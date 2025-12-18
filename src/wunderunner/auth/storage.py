@@ -20,10 +20,7 @@ def _get_auth_path() -> Path:
     Uses XDG_DATA_HOME if set, otherwise ~/.local/share/wunderunner/auth.json
     """
     xdg_data = os.environ.get("XDG_DATA_HOME")
-    if xdg_data:
-        base = Path(xdg_data)
-    else:
-        base = Path.home() / ".local" / "share"
+    base = Path(xdg_data) if xdg_data else Path.home() / ".local" / "share"
     return base / "wunderunner" / AUTH_FILE
 
 
