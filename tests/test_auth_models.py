@@ -2,8 +2,6 @@
 
 import time
 
-import pytest
-
 from wunderunner.auth.models import AuthStore, Provider, TokenSet
 
 
