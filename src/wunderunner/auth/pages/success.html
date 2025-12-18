@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>wunderunner - Authenticated</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            background-color: #0d1117;
+            color: #00ff00;
+            font-family: 'Courier New', Courier, monospace;
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        .container {
+            text-align: center;
+            padding: 2rem;
+            border: 1px solid #30363d;
+            border-radius: 8px;
+            background-color: #161b22;
+            max-width: 500px;
+        }
+        .logo {
+            color: #58a6ff;
+            font-size: 0.7rem;
+            line-height: 1.2;
+            margin-bottom: 1.5rem;
+            white-space: pre;
+        }
+        .success {
+            color: #3fb950;
+            font-size: 1.5rem;
+            margin-bottom: 0.5rem;
+        }
+        .message {
+            color: #8b949e;
+            font-size: 1rem;
+        }
+        .checkmark {
+            font-size: 3rem;
+            margin-bottom: 1rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <pre class="logo">
+██╗    ██╗██╗  ██╗██████╗
+██║    ██║╚██╗██╔╝██╔══██╗
+██║ █╗ ██║ ╚███╔╝ ██████╔╝
+██║███╗██║ ██╔██╗ ██╔══██╗
+╚███╔███╔╝██╔╝ ██╗██║  ██║
+ ╚══╝╚══╝ ╚═╝  ╚═╝╚═╝  ╚═╝
+        </pre>
+        <div class="checkmark">✓</div>
+        <div class="success">Successfully authenticated</div>
+        <div class="message">You can close this tab and return to the terminal.</div>
+    </div>
+    <script>
+        // Auto-close after 3 seconds
+        setTimeout(() => window.close(), 3000);
+    </script>
+</body>
+</html>
