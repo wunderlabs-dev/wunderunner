@@ -12,6 +12,7 @@ from rich.console import Console
 from rich.logging import RichHandler
 from rich.prompt import Prompt
 
+from wunderunner.cli.auth import auth_app
 from wunderunner.settings import get_settings
 from wunderunner.workflows.containerize import Analyze, containerize_graph
 from wunderunner.workflows.state import ContainerizeState, Learning, Severity
@@ -57,6 +58,7 @@ app = typer.Typer(
     name="wunderunner",
     help="AI-powered Docker configuration generator.",
 )
+app.add_typer(auth_app)
 
 
 def _validate_project_path(path: Path) -> Path:
