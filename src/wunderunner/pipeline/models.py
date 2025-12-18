@@ -154,3 +154,31 @@ class FixHistory(BaseModel):
     created_at: datetime = Field(default_factory=_utc_now)
     attempts: list[FixAttempt] = Field(default_factory=list)
     active_constraints: list[Constraint] = Field(default_factory=list)
+
+
+class ExhaustionItem(BaseModel):
+    """An approach that could be tried."""
+
+    approach: str = Field(description="What could be tried: CPU-only torch")
+    attempted: bool = Field(default=False, description="Whether it's been tried")
+
+
+class ErrorAnalysis(BaseModel):
+    """Output from ERROR-RESEARCH phase."""
+
+    error_summary: str = Field(description="Brief error description")
+    root_cause: str = Field(description="What we think caused it")
+    fix_history_review: str = Field(description="Summary of previous attempts")
+    exhaustion_status: list[ExhaustionItem] = Field(default_factory=list)
+    recommendation: str = Field(description="continue or stop")
+    suggested_approach: str | None = Field(default=None, description="What to try next")
+
+
+class FixPlan(BaseModel):
+    """Output from FIX-PLAN phase - surgical changes."""
+
+    summary: str = Field(description="Brief description of the fix")
+    dockerfile: str = Field(description="Updated Dockerfile content")
+    compose: str | None = Field(default=None, description="Updated compose if needed")
+    changes_description: str = Field(description="What changed and why")
+    constraints_honored: list[str] = Field(default_factory=list)

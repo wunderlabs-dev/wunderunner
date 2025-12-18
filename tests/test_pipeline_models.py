@@ -7,10 +7,13 @@ from wunderunner.pipeline.models import (
     ContainerizationPlan,
     DependencyFindings,
     EnvVarFinding,
+    ErrorAnalysis,
+    ExhaustionItem,
     FixAttempt,
     FixChange,
     FixError,
     FixHistory,
+    FixPlan,
     NativeDependency,
     ResearchResult,
     RuntimeFindings,
@@ -183,3 +186,31 @@ def test_constraint_lifecycle():
     )
     assert constraint.status == ConstraintStatus.HARD
     assert constraint.success_count == 0
+
+
+def test_error_analysis_tracks_exhaustion():
+    """ErrorAnalysis tracks what approaches have been tried."""
+    analysis = ErrorAnalysis(
+        error_summary="BUILD failed: missing CUDA",
+        root_cause="Base image lacks CUDA libraries",
+        fix_history_review="No previous CUDA attempts",
+        exhaustion_status=[
+            ExhaustionItem(approach="CPU-only torch", attempted=False),
+            ExhaustionItem(approach="nvidia/cuda base", attempted=False),
+        ],
+        recommendation="continue",
+        suggested_approach="Use CPU-only torch",
+    )
+    assert analysis.recommendation == "continue"
+    assert not analysis.exhaustion_status[0].attempted
+
+
+def test_fix_plan_specifies_changes():
+    """FixPlan contains exact file changes."""
+    plan = FixPlan(
+        summary="Switch to CPU-only torch",
+        dockerfile="FROM python:3.11-slim\nRUN pip install torch --index-url ...",
+        changes_description="Changed torch install to CPU-only variant",
+        constraints_honored=["MUST use python:3.11-slim"],
+    )
+    assert "torch" in plan.dockerfile
