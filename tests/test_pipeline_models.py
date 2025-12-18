@@ -14,6 +14,7 @@ from wunderunner.pipeline.models import (
     FixError,
     FixHistory,
     FixPlan,
+    ImplementResult,
     NativeDependency,
     ResearchResult,
     RuntimeFindings,
@@ -214,3 +215,23 @@ def test_fix_plan_specifies_changes():
         constraints_honored=["MUST use python:3.11-slim"],
     )
     assert "torch" in plan.dockerfile
+
+
+def test_implement_result_success():
+    """ImplementResult tracks successful execution."""
+    result = ImplementResult(success=True, files_written=["Dockerfile", "docker-compose.yaml"])
+    assert result.success
+    assert result.error is None
+
+
+def test_implement_result_failure():
+    """ImplementResult captures error details."""
+    result = ImplementResult(
+        success=False,
+        files_written=["Dockerfile"],
+        phase="BUILD",
+        error="npm ERR! Missing script: build",
+        logs="/path/to/logs/attempt-1.log",
+    )
+    assert not result.success
+    assert result.phase == "BUILD"

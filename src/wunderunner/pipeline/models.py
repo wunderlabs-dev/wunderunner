@@ -182,3 +182,13 @@ class FixPlan(BaseModel):
     compose: str | None = Field(default=None, description="Updated compose if needed")
     changes_description: str = Field(description="What changed and why")
     constraints_honored: list[str] = Field(default_factory=list)
+
+
+class ImplementResult(BaseModel):
+    """Output from IMPLEMENT phase."""
+
+    success: bool = Field(description="Whether all verification passed")
+    files_written: list[str] = Field(default_factory=list, description="Files created/updated")
+    phase: str | None = Field(default=None, description="Phase that failed: BUILD, START, HEALTHCHECK")
+    error: str | None = Field(default=None, description="Error message if failed")
+    logs: str | None = Field(default=None, description="Path to log file")
