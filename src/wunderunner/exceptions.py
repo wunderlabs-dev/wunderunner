@@ -31,3 +31,30 @@ class HealthcheckError(WunderunnerError):
 
 class ValidationError(WunderunnerError):
     """Failed to validate generated artifacts."""
+
+
+class AuthError(WunderunnerError):
+    """Base exception for authentication errors."""
+
+
+class TokenExpiredError(AuthError):
+    """Token expired and refresh failed."""
+
+
+class TokenRefreshError(AuthError):
+    """Failed to refresh OAuth token."""
+
+
+class OAuthCallbackError(AuthError):
+    """OAuth callback server failed or timed out."""
+
+
+class NoAuthError(AuthError):
+    """No authentication configured for provider."""
+
+    def __init__(self, provider: str) -> None:
+        self.provider = provider
+        super().__init__(
+            f"No {provider} credentials configured. "
+            f"Run `wxr auth login` or set {provider.upper()}_API_KEY environment variable."
+        )
