@@ -60,3 +60,12 @@ class ServiceFindings(BaseModel):
     """Output from service-detector specialist."""
 
     services: list[ServiceFinding] = Field(default_factory=list)
+
+
+class ResearchResult(BaseModel):
+    """Combined output from all RESEARCH phase specialists."""
+
+    runtime: RuntimeFindings
+    dependencies: DependencyFindings
+    config: ConfigFindings
+    services: ServiceFindings

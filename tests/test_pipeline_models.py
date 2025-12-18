@@ -5,6 +5,7 @@ from wunderunner.pipeline.models import (
     DependencyFindings,
     EnvVarFinding,
     NativeDependency,
+    ResearchResult,
     RuntimeFindings,
     ServiceFinding,
     ServiceFindings,
@@ -93,3 +94,17 @@ def test_service_findings_with_services():
     )
     assert len(findings.services) == 2
     assert findings.services[0].version == "15"
+
+
+def test_research_result_combines_findings():
+    """ResearchResult combines all specialist findings."""
+    result = ResearchResult(
+        runtime=RuntimeFindings(language="python", version="3.11", framework="fastapi"),
+        dependencies=DependencyFindings(package_manager="uv", start_command="uvicorn app:app"),
+        config=ConfigFindings(env_vars=[EnvVarFinding(name="DATABASE_URL", secret=True)]),
+        services=ServiceFindings(services=[ServiceFinding(type="postgres")]),
+    )
+    assert result.runtime.language == "python"
+    assert result.dependencies.package_manager == "uv"
+    assert len(result.config.env_vars) == 1
+    assert len(result.services.services) == 1
