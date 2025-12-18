@@ -46,3 +46,17 @@ class ConfigFindings(BaseModel):
     config_files: list[str] = Field(
         default_factory=list, description="Config files found: .env.example"
     )
+
+
+class ServiceFinding(BaseModel):
+    """A backing service discovered in the project."""
+
+    type: str = Field(description="Service type: postgres, redis, rabbitmq")
+    version: str | None = Field(default=None, description="Version if detected: 15, 7")
+    env_var: str | None = Field(default=None, description="Related env var: DATABASE_URL")
+
+
+class ServiceFindings(BaseModel):
+    """Output from service-detector specialist."""
+
+    services: list[ServiceFinding] = Field(default_factory=list)

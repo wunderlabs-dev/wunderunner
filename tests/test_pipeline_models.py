@@ -6,6 +6,8 @@ from wunderunner.pipeline.models import (
     EnvVarFinding,
     NativeDependency,
     RuntimeFindings,
+    ServiceFinding,
+    ServiceFindings,
 )
 
 
@@ -73,3 +75,21 @@ def test_config_findings_with_secrets():
     assert len(findings.env_vars) == 2
     assert findings.env_vars[0].secret is True
     assert findings.env_vars[1].default == "3000"
+
+
+def test_service_findings_empty():
+    """ServiceFindings defaults to empty list."""
+    findings = ServiceFindings()
+    assert findings.services == []
+
+
+def test_service_findings_with_services():
+    """ServiceFindings tracks discovered services."""
+    findings = ServiceFindings(
+        services=[
+            ServiceFinding(type="postgres", version="15", env_var="DATABASE_URL"),
+            ServiceFinding(type="redis", env_var="REDIS_URL"),
+        ]
+    )
+    assert len(findings.services) == 2
+    assert findings.services[0].version == "15"
