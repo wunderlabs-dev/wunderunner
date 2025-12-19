@@ -50,21 +50,9 @@ https://github.com/user-attachments/assets/c0f82ca0-5f8b-4370-8b3f-fd4bcd8a1939
 
 ## Quick Start
 
-### Option 1: Use your Claude Pro/Max subscription (OAuth)
-
 ```bash
-# Login with your Anthropic account
+# Login with your Anthropic account (Claude Pro/Max subscription)
 uvx wunderunner auth login
-
-# Run on any project
-uvx wunderunner /path/to/your/project
-```
-
-### Option 2: Use an API key
-
-```bash
-# Set your API key
-export ANTHROPIC_API_KEY=sk-ant-...
 
 # Run on any project
 uvx wunderunner /path/to/your/project
