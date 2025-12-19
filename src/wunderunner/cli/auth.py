@@ -89,46 +89,48 @@ async def _login_anthropic_oauth() -> None:
     code_verifier, code_challenge = generate_pkce()
     state = generate_state()
 
-    # Start callback server
+    # Start callback server on random port
     server = CallbackServer(port=0)
     await server.start()
+    redirect_uri = server.callback_url
 
     try:
-        # Build auth URL (using Anthropic's redirect, not localhost)
-        # The console will show the code which user pastes
+        # Build auth URL using our local callback server
         auth_url = build_auth_url(
             code_challenge=code_challenge,
             state=state,
-            redirect_uri=AnthropicOAuth.REDIRECT_URI,
+            redirect_uri=redirect_uri,
         )
 
-        console.print(f"\n[dim]Opening browser for authentication...[/dim]")
-        console.print(f"[dim]If browser doesn't open, visit:[/dim]")
+        console.print("\n[dim]Opening browser for authentication...[/dim]")
+        console.print("[dim]If browser doesn't open, visit:[/dim]")
         console.print(f"[link={auth_url}]{auth_url[:80]}...[/link]\n")
 
         webbrowser.open(auth_url)
 
-        # For Anthropic, the redirect goes to their console which shows the code
-        # User needs to paste the code
-        console.print("[bold]After authenticating, paste the authorization code:[/bold]")
-        code = Prompt.ask("Authorization code")
+        # Wait for OAuth callback from browser
+        console.print("[bold]Waiting for authentication...[/bold]")
+        console.print("[dim]Complete the login in your browser.[/dim]\n")
 
-        if not code:
-            console.print("[red]No code provided. Aborting.[/red]")
-            return
+        code = await asyncio.wait_for(
+            server.wait_for_callback(expected_state=state),
+            timeout=OAUTH_TIMEOUT,
+        )
 
         # Exchange code for tokens
         console.print("[dim]Exchanging code for tokens...[/dim]")
         tokens = await exchange_code_for_tokens(
             code=code,
             code_verifier=code_verifier,
-            redirect_uri=AnthropicOAuth.REDIRECT_URI,
+            redirect_uri=redirect_uri,
         )
 
         # Save tokens
         await save_tokens(Provider.ANTHROPIC, tokens)
         console.print("\n[green bold]Successfully authenticated with Anthropic![/green bold]")
 
+    except asyncio.TimeoutError:
+        console.print("\n[red]Authentication timed out. Please try again.[/red]")
     except OAuthCallbackError as e:
         console.print(f"\n[red]Authentication failed: {e}[/red]")
     except Exception as e:
