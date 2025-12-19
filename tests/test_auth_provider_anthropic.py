@@ -12,8 +12,8 @@ class TestAnthropicOAuthConstants:
         assert AnthropicOAuth.CLIENT_ID == "9d1c250a-e61b-44d9-88ed-5944d1962f5e"
 
     def test_auth_url(self):
-        """AUTH_URL points to Anthropic console."""
-        assert "console.anthropic.com" in AnthropicOAuth.AUTH_URL
+        """AUTH_URL points to Claude.ai for Max users."""
+        assert "claude.ai" in AnthropicOAuth.AUTH_URL
         assert "oauth/authorize" in AnthropicOAuth.AUTH_URL
 
     def test_token_url(self):

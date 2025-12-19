@@ -10,9 +10,8 @@ from rich.prompt import Prompt
 from rich.table import Table
 
 from wunderunner.auth.models import Provider
-from wunderunner.auth.pkce import generate_pkce, generate_state
+from wunderunner.auth.pkce import generate_pkce
 from wunderunner.auth.providers.anthropic import (
-    AnthropicOAuth,
     build_auth_url,
     exchange_code_for_tokens,
 )
@@ -82,18 +81,13 @@ async def _login_anthropic_oauth() -> None:
     """Run Anthropic OAuth flow."""
     console.print("\n[dim]Starting OAuth flow...[/dim]")
 
-    # Generate PKCE and state
+    # Generate PKCE (verifier is also used as state per OpenCode)
     code_verifier, code_challenge = generate_pkce()
-    state = generate_state()
-
-    # Use Anthropic's hosted redirect (their client only allows this)
-    redirect_uri = AnthropicOAuth.REDIRECT_URI
 
     # Build auth URL
     auth_url = build_auth_url(
         code_challenge=code_challenge,
-        state=state,
-        redirect_uri=redirect_uri,
+        code_verifier=code_verifier,
     )
 
     console.print("\n[dim]Opening browser for authentication...[/dim]")
@@ -116,7 +110,6 @@ async def _login_anthropic_oauth() -> None:
         tokens = await exchange_code_for_tokens(
             code=code.strip(),
             code_verifier=code_verifier,
-            redirect_uri=redirect_uri,
         )
 
         # Save tokens

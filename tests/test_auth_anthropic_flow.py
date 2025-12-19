@@ -21,8 +21,7 @@ class TestBuildAuthUrl:
         """Auth URL includes client ID."""
         url = build_auth_url(
             code_challenge="challenge",
-            state="state123",
-            redirect_uri="http://localhost/callback",
+            code_verifier="verifier123",
         )
         assert f"client_id={AnthropicOAuth.CLIENT_ID}" in url
 
@@ -30,38 +29,43 @@ class TestBuildAuthUrl:
         """Auth URL includes PKCE code challenge."""
         url = build_auth_url(
             code_challenge="test_challenge",
-            state="state123",
-            redirect_uri="http://localhost/callback",
+            code_verifier="verifier123",
         )
         assert "code_challenge=test_challenge" in url
         assert "code_challenge_method=S256" in url
 
-    def test_includes_state(self):
-        """Auth URL includes state parameter."""
+    def test_includes_state_as_verifier(self):
+        """Auth URL uses code_verifier as state (per OpenCode)."""
         url = build_auth_url(
             code_challenge="challenge",
-            state="my_state_value",
-            redirect_uri="http://localhost/callback",
+            code_verifier="my_verifier_value",
         )
-        assert "state=my_state_value" in url
+        assert "state=my_verifier_value" in url
 
     def test_includes_redirect_uri(self):
-        """Auth URL includes redirect URI."""
+        """Auth URL includes Anthropic's redirect URI."""
         url = build_auth_url(
             code_challenge="challenge",
-            state="state",
-            redirect_uri="http://localhost:8080/callback",
+            code_verifier="verifier",
         )
         assert "redirect_uri=" in url
+        assert "console.anthropic.com" in url
 
     def test_response_type_is_code(self):
         """Auth URL requests authorization code."""
         url = build_auth_url(
             code_challenge="challenge",
-            state="state",
-            redirect_uri="http://localhost/callback",
+            code_verifier="verifier",
         )
         assert "response_type=code" in url
+
+    def test_includes_code_true_param(self):
+        """Auth URL includes code=true parameter."""
+        url = build_auth_url(
+            code_challenge="challenge",
+            code_verifier="verifier",
+        )
+        assert "code=true" in url
 
 
 class TestExchangeCodeForTokens:
@@ -88,7 +92,6 @@ class TestExchangeCodeForTokens:
             tokens = await exchange_code_for_tokens(
                 code="auth_code",
                 code_verifier="verifier",
-                redirect_uri="http://localhost/callback",
             )
 
             assert isinstance(tokens, TokenSet)
@@ -117,12 +120,42 @@ class TestExchangeCodeForTokens:
             tokens = await exchange_code_for_tokens(
                 code="code",
                 code_verifier="verifier",
-                redirect_uri="http://localhost/callback",
             )
             after = int(time.time())
 
             # expires_at should be now + expires_in
             assert before + 3600 <= tokens.expires_at <= after + 3600
+
+    @pytest.mark.asyncio
+    async def test_handles_code_with_state_hash(self):
+        """exchange_code_for_tokens parses code#state format."""
+        mock_response = {
+            "access_token": "access",
+            "refresh_token": "refresh",
+            "expires_in": 3600,
+            "token_type": "Bearer",
+        }
+
+        with patch("httpx.AsyncClient") as mock_client:
+            mock_instance = AsyncMock()
+            mock_client.return_value.__aenter__.return_value = mock_instance
+            mock_response_obj = MagicMock()
+            mock_response_obj.raise_for_status = MagicMock()
+            mock_response_obj.json.return_value = mock_response
+            mock_instance.post.return_value = mock_response_obj
+
+            # Anthropic returns code in format: code#state
+            tokens = await exchange_code_for_tokens(
+                code="auth_code_123#state_from_anthropic",
+                code_verifier="verifier",
+            )
+
+            assert isinstance(tokens, TokenSet)
+            # Verify the POST was called with parsed code
+            call_args = mock_instance.post.call_args
+            json_data = call_args.kwargs["json"]
+            assert json_data["code"] == "auth_code_123"
+            assert json_data["state"] == "state_from_anthropic"
 
 
 class TestRefreshAccessToken:
